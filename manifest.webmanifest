@@ -1,21 +1,16 @@
 {
-  "name": "سوبرماركت - نظام محاسبة ومخزون",
+  "name": "سوبرماركت المحاسبي الاحترافي",
   "short_name": "سوبرماركت",
   "start_url": "index.html",
   "display": "standalone",
   "dir": "rtl",
   "lang": "ar",
-  "background_color": "#eef3f8",
-  "theme_color": "#0754c9",
+  "background_color": "#edf4f1",
+  "theme_color": "#0f9f6e",
   "icons": [
     {
       "src": "icon.svg",
       "sizes": "192x192",
-      "type": "image/svg+xml"
-    },
-    {
-      "src": "icon.svg",
-      "sizes": "512x512",
       "type": "image/svg+xml"
     }
   ]
