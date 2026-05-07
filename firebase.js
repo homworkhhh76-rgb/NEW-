@@ -26,8 +26,9 @@ const firebaseConfig = {
   async function putCloud(data, companyKey){ const r=await fetch(url(companyKey),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data||{})}); if(!r.ok) throw new Error('Firebase push failed'); return await r.json(); }
   function mergeArrays(localArr=[], cloudArr=[]){
     const map=new Map();
-    [...cloudArr, ...localArr].forEach(x=>{ if(x&&x.id) map.set(x.id,{...(map.get(x.id)||{}),...x}); });
-    return [...map.values()].sort((a,b)=>String(b.createdAt||b.date||'').localeCompare(String(a.createdAt||a.date||'')));
+    function ts(x){return Date.parse(x?._updatedAt||x?.deletedAt||x?.updatedAt||x?.createdAt||x?.date||0)||0;}
+    [...cloudArr,...localArr].forEach(x=>{if(!x||!x.id)return;const p=map.get(x.id);if(!p||ts(x)>=ts(p))map.set(x.id,{...(p||{}),...x});});
+    return [...map.values()].sort((a,b)=>String(b._updatedAt||b.createdAt||b.date||'').localeCompare(String(a._updatedAt||a.createdAt||a.date||'')));
   }
   function mergeDB(local={}, cloud={}){
     const out={...cloud,...local};
