@@ -24,15 +24,36 @@ const firebaseConfig = {
   function url(companyKey){ return `${firebaseConfig.databaseURL}/pos_projects/${root(companyKey)}.json`; }
   async function getCloud(companyKey){ const r=await fetch(url(companyKey),{cache:'no-store'}); if(!r.ok) throw new Error('Firebase pull failed'); return await r.json() || {}; }
   async function putCloud(data, companyKey){ const r=await fetch(url(companyKey),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data||{})}); if(!r.ok) throw new Error('Firebase push failed'); return await r.json(); }
-  function mergeArrays(localArr=[], cloudArr=[]){
+  function mergeArrays(localArr=[], cloudArr=[], deletedMap={}){
     const map=new Map();
     function ts(x){return Date.parse(x?._updatedAt||x?.deletedAt||x?.updatedAt||x?.createdAt||x?.date||0)||0;}
-    [...cloudArr,...localArr].forEach(x=>{if(!x||!x.id)return;const p=map.get(x.id);if(!p||ts(x)>=ts(p))map.set(x.id,{...(p||{}),...x});});
-    return [...map.values()].sort((a,b)=>String(b._updatedAt||b.createdAt||b.date||'').localeCompare(String(a._updatedAt||a.createdAt||a.date||'')));
+    function delTs(id){return Date.parse(deletedMap && deletedMap[String(id)] || 0)||0;}
+    [...cloudArr,...localArr].forEach(x=>{
+      if(!x||!x.id)return;
+      const id=String(x.id), dts=delTs(id), xts=ts(x);
+      if(dts && dts>=xts) return;
+      const p=map.get(id);
+      if(!p||xts>=ts(p))map.set(id,{...(p||{}),...x});
+    });
+    return [...map.values()].filter(x=>!x._deleted).sort((a,b)=>String(b._updatedAt||b.createdAt||b.date||'').localeCompare(String(a._updatedAt||a.createdAt||a.date||'')));
   }
   function mergeDB(local={}, cloud={}){
     const out={...cloud,...local};
-    Object.keys({...cloud,...local}).forEach(k=>{ if(Array.isArray(local[k])||Array.isArray(cloud[k])) out[k]=mergeArrays(local[k]||[], cloud[k]||[]); });
+    const deletedRecords={...(cloud._deletedRecords||{}),...(local._deletedRecords||{})};
+    const tombstones=[...(cloud._deletedTombstones||[]),...(local._deletedTombstones||[])];
+    tombstones.forEach(t=>{
+      if(!t||!t.collection||!t.id)return;
+      deletedRecords[t.collection]=deletedRecords[t.collection]||{};
+      const prev=Date.parse(deletedRecords[t.collection][String(t.id)]||0)||0;
+      const cur=Date.parse(t.deletedAt||0)||0;
+      if(cur>=prev)deletedRecords[t.collection][String(t.id)]=t.deletedAt||new Date().toISOString();
+    });
+    Object.keys({...cloud,...local}).forEach(k=>{
+      if(Array.isArray(local[k])||Array.isArray(cloud[k])) out[k]=mergeArrays(local[k]||[], cloud[k]||[], deletedRecords[k]||{});
+    });
+    Object.keys(deletedRecords).forEach(k=>{ if(Array.isArray(out[k])) out[k]=out[k].filter(x=>!deletedRecords[k][String(x.id)]); });
+    out._deletedRecords=deletedRecords;
+    out._deletedTombstones=tombstones.slice(-2000);
     out.settings={...(cloud.settings||{}),...(local.settings||{})};
     out.settings.companyKey = out.settings.companyKey || local?.settings?.companyKey || cloud?.settings?.companyKey || 'SUPER-0001';
     out.lastSyncAt = new Date().toISOString();
