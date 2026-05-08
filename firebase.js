@@ -1,5 +1,5 @@
 // firebase.js - ملف فايربيز الوحيد في المشروع
-// Offline-first: التخزين المحلي هو الأساس، والمزامنة تتم تلقائياً عند توفر الإنترنت.
+// إصلاح مركزي للمزامنة: يلتقط أي حفظ/تعديل/حذف من كل الصفحات ثم يدمجه مع Firebase.
 const firebaseConfig = {
   apiKey: "AIzaSyC0l8H7dBiGqK75-ajx1-l5eky45FK4Wmw",
   authDomain: "momen-628a4.firebaseapp.com",
@@ -11,359 +11,414 @@ const firebaseConfig = {
   databaseURL: "https://momen-628a4-default-rtdb.firebaseio.com"
 };
 
-/* ===== OSKAR FIREBASE SAVE/EDIT/DELETE SYNC FIX - 2026-05-08 =====
-   إصلاح محدود داخل ملف Firebase فقط:
-   - لا يغير صفحات الموقع أو التصميم.
-   - يحافظ على الحفظ المحلي كما هو.
-   - يضيف ختم تحديث للتعديلات حتى لا يغلبها القديم في Firebase.
-   - يحفظ علامات حذف تلقائياً عندما يحذف أي صف من أي جدول، حتى لا يرجعه الدمج من السحابة.
-   - يشغل مزامنة هادئة بعد أي حفظ محلي على مفتاح بيانات البرنامج.
-*/
 (function(){
-  if(window.__OSKAR_FIREBASE_SYNC_FIX_V2__) return;
-  window.__OSKAR_FIREBASE_SYNC_FIX_V2__ = true;
+  if(window.__OSKAR_FIREBASE_SYNC_CORE_V3__) return;
+  window.__OSKAR_FIREBASE_SYNC_CORE_V3__ = true;
 
   const APP_KEY = 'supermarket_pos_ar_v1';
-  const FALLBACK_COMPANY = 'SUPER-0001';
-  let internalWrite = false;
-  let autoTimer = null;
-  let autoBusy = false;
-  let autoPending = false;
+  const DEFAULT_COMPANY = 'SUPER-0001';
+  const META_KEYS = new Set(['_updatedAt','updatedAt','lastLocalUpdate','lastSyncAt','_dirty','_syncSeq']);
+  const KNOWN_ARRAYS = [
+    'accounts','branches','units','employees','activityLog','accountMovements','products','customers','suppliers',
+    'sales','draftSales','quotations','purchases','expenses','wages','debts','debtPayments','manualDebts','payments',
+    'stockMovements','stockTransfers','damagedStock','returns','saleReturns','purchaseReturns','cashierSessions',
+    'groups','brands','priceGroups','customerGroups','variations','taxRates','invoices','invoicePrints','workers','bestSellers',
+    'restaurantProducts','restaurantOrders','restaurantSales','restaurantExpenses','restaurantTables','restaurantMenu',
+    'restaurantReservations','restaurantWastage','restaurantPayments','restaurantInventoryMovements','restaurantLoyalty',
+    'restaurantCategories','restaurantRecipes'
+  ];
 
-  const originalSetItem = Storage.prototype.setItem;
+  const nativeGet = Storage.prototype.getItem;
+  const nativeSet = Storage.prototype.setItem;
+  const nativeRemove = Storage.prototype.removeItem;
+  let internalWrite = false;
+  let syncTimer = null;
+  let writeSeq = Number(sessionStorage.getItem('oskar_sync_seq') || '0') || 0;
 
   function now(){ return new Date().toISOString(); }
-  function isObj(v){ return v && typeof v === 'object' && !Array.isArray(v); }
-  function clone(v){ try{return JSON.parse(JSON.stringify(v||{}));}catch(e){return {}; } }
-  function parse(v){ try{return JSON.parse(v || '{}') || {}; }catch(e){ return {}; } }
-  function readLocal(){ return parse(localStorage.getItem(APP_KEY)); }
-  function writeLocal(db){
-    internalWrite = true;
-    try{ localStorage.setItem(APP_KEY, JSON.stringify(db || {})); }
-    finally{ internalWrite = false; }
-  }
-  function clean(v){ return String(v || FALLBACK_COMPANY).trim().replace(/[^a-zA-Z0-9_-]/g,'_') || FALLBACK_COMPANY; }
-  function companyRoot(companyKey){
+  function safeJSON(v, fallback){ try{ return JSON.parse(v); }catch(e){ return fallback; } }
+  function clone(v){ return safeJSON(JSON.stringify(v == null ? {} : v), {}); }
+  function readRaw(){ return nativeGet.call(localStorage, APP_KEY); }
+  function readLocal(){ return safeJSON(readRaw() || '{}', {}) || {}; }
+  function writeRaw(db){ internalWrite = true; try{ nativeSet.call(localStorage, APP_KEY, JSON.stringify(db || {})); } finally { internalWrite = false; } }
+  function cleanKey(v){ return String(v || DEFAULT_COMPANY).trim().replace(/[^a-zA-Z0-9_-]/g,'_') || DEFAULT_COMPANY; }
+  function companyKey(companyKey){
     const db = readLocal();
     let key = companyKey || db?.settings?.companyKey;
-    try{
-      const u = JSON.parse(localStorage.getItem('currentUser') || '{}');
-      key = key || u.companyKey || u.managerKey;
-    }catch(e){}
-    return clean(key || FALLBACK_COMPANY);
+    try{ const u = safeJSON(nativeGet.call(localStorage,'currentUser') || '{}', {}); key = key || u.companyKey || u.managerKey; }catch(e){}
+    return cleanKey(key || DEFAULT_COMPANY);
   }
-  function url(companyKey){ return `${firebaseConfig.databaseURL}/pos_projects/${companyRoot(companyKey)}.json`; }
-  async function getCloud(companyKey){
-    const r = await fetch(url(companyKey), {cache:'no-store'});
-    if(!r.ok) throw new Error('Firebase pull failed: ' + r.status);
-    return await r.json() || {};
+  function firebaseURL(companyKeyArg){ return `${firebaseConfig.databaseURL}/pos_projects/${companyKey(companyKeyArg)}.json`; }
+  function isPlainObject(x){ return x && typeof x === 'object' && !Array.isArray(x); }
+  function objKeys(o){ return o && typeof o === 'object' ? Object.keys(o) : []; }
+  function allKeys(a,b){ return Array.from(new Set([...(objKeys(a)),...(objKeys(b))])); }
+  function stampValue(x){
+    if(!x || typeof x !== 'object') return 0;
+    const raw = x._updatedAt || x.updatedAt || x.deletedAt || x.createdAt || x.date || x.time || '';
+    const t = Date.parse(raw);
+    return Number.isFinite(t) ? t : (Number(x._syncSeq || 0) || 0);
   }
-  async function putCloud(data, companyKey){
-    const r = await fetch(url(companyKey), {
-      method:'PUT',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(data || {})
-    });
-    if(!r.ok) throw new Error('Firebase push failed: ' + r.status);
-    return await r.json();
-  }
-
-  function mergeDeleted(){
-    const out = {};
-    for(const src of arguments){
-      if(!src) continue;
-      const pools = [src.__deleted, src._deletedIds];
-      pools.forEach(pool=>{
-        if(!isObj(pool)) return;
-        Object.keys(pool).forEach(coll=>{
-          out[coll] = out[coll] || {};
-          if(isObj(pool[coll])) Object.assign(out[coll], pool[coll]);
-        });
-      });
-      Object.keys(src).forEach(coll=>{
-        const arr = src[coll];
-        if(!Array.isArray(arr)) return;
-        arr.forEach(row=>{
-          if(row && row.id && (row._deleted || row.deletedAt)){
-            out[coll] = out[coll] || {};
-            out[coll][row.id] = row.deletedAt || row._updatedAt || row.updatedAt || now();
-          }
-        });
-      });
+  function stable(v){
+    if(Array.isArray(v)) return v.map(stable);
+    if(isPlainObject(v)){
+      const out = {};
+      Object.keys(v).sort().forEach(k=>{ if(!META_KEYS.has(k)) out[k] = stable(v[k]); });
+      return out;
     }
+    return v;
+  }
+  function stableString(v){ try{ return JSON.stringify(stable(v)); }catch(e){ return ''; } }
+  function nextSeq(){ writeSeq += 1; try{ sessionStorage.setItem('oskar_sync_seq', String(writeSeq)); }catch(e){} return writeSeq; }
+  function makeId(prefix){ return `${prefix || 'id'}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`; }
+  function mergeDeleted(a,b){
+    const out = {};
+    [a?.__deleted, a?._deletedIds, b?.__deleted, b?._deletedIds].forEach(src=>{
+      if(!src || typeof src !== 'object') return;
+      Object.keys(src).forEach(coll=>{
+        out[coll] = out[coll] || {};
+        Object.keys(src[coll] || {}).forEach(id=>{
+          const oldT = Date.parse(out[coll][id] || '') || 0;
+          const newT = Date.parse(src[coll][id] || '') || 0;
+          if(!out[coll][id] || newT >= oldT) out[coll][id] = src[coll][id] || now();
+        });
+      });
+    });
     return out;
   }
-
-  function rememberDeleted(db, coll, id, t){
-    if(!db || !coll || !id) return;
-    t = t || now();
-    db.__deleted = db.__deleted || {};
-    db.__deleted[coll] = db.__deleted[coll] || {};
-    db.__deleted[coll][id] = db.__deleted[coll][id] || t;
-    db._deletedIds = db._deletedIds || {};
-    db._deletedIds[coll] = db._deletedIds[coll] || {};
-    db._deletedIds[coll][id] = db._deletedIds[coll][id] || t;
+  function noteDeletion(deleted, coll, id, ts){
+    if(!coll || !id) return;
+    deleted[coll] = deleted[coll] || {};
+    deleted[coll][String(id)] = deleted[coll][String(id)] || ts || now();
   }
-
-  function strippedForCompare(row){
-    if(!isObj(row)) return row;
-    const x = {...row};
-    delete x._updatedAt;
-    delete x.updatedAt;
-    delete x.lastSyncAt;
-    delete x.lastLocalUpdate;
-    return x;
-  }
-  function sameRow(a,b){
-    try{return JSON.stringify(strippedForCompare(a)) === JSON.stringify(strippedForCompare(b));}
-    catch(e){return false;}
-  }
-  function rowTime(row){
-    return Date.parse(row?._updatedAt || row?.updatedAt || row?.deletedAt || row?.createdAt || row?.date || row?.time || 0) || 0;
-  }
-
-  function normalizeLocalChange(next, prev){
-    next = clone(next);
-    prev = clone(prev);
-    const t = now();
-    const deleted = mergeDeleted(prev, next);
-
-    // لو كود الصفحة حذف صفاً من المصفوفة بدون تسجيل علامة حذف، نسجلها هنا تلقائياً.
-    Object.keys(prev).forEach(coll=>{
-      if(!Array.isArray(prev[coll]) || !Array.isArray(next[coll])) return;
-      const nextIds = new Set(next[coll].filter(x=>x && x.id).map(x=>String(x.id)));
-      prev[coll].forEach(oldRow=>{
-        if(oldRow && oldRow.id && !nextIds.has(String(oldRow.id))){
-          deleted[coll] = deleted[coll] || {};
-          deleted[coll][oldRow.id] = deleted[coll][oldRow.id] || t;
-        }
-      });
+  function detectDeleted(prev, next, deleted){
+    allKeys(prev,next).forEach(coll=>{
+      if(coll === '__deleted' || coll === '_deletedIds') return;
+      if(!Array.isArray(prev?.[coll]) || !Array.isArray(next?.[coll])) return;
+      const before = new Set(prev[coll].filter(x=>x && x.id).map(x=>String(x.id)));
+      const after = new Set(next[coll].filter(x=>x && x.id).map(x=>String(x.id)));
+      before.forEach(id=>{ if(!after.has(id)) noteDeletion(deleted, coll, id, now()); });
     });
-
-    // نختم الصفوف الجديدة أو المعدلة حتى يغلب التعديل المحلي على نسخة Firebase القديمة.
-    Object.keys(next).forEach(coll=>{
-      if(!Array.isArray(next[coll])) return;
-      const oldMap = new Map((prev[coll] || []).filter(x=>x && x.id).map(x=>[String(x.id), x]));
-      next[coll] = next[coll].filter(row=>{
-        if(!row || typeof row !== 'object') return true;
-        if(row.id && (row._deleted || row.deletedAt)){
-          deleted[coll] = deleted[coll] || {};
-          deleted[coll][row.id] = row.deletedAt || row._updatedAt || t;
-          return false;
-        }
-        if(row.id){
-          const old = oldMap.get(String(row.id));
-          if(!old){
-            row.createdAt = row.createdAt || t;
-            row._updatedAt = row._updatedAt || t;
-          }else if(!sameRow(old,row)){
-            row._updatedAt = t;
-          }
-        }
-        return true;
-      });
+  }
+  function normalizeArray(arr, coll, prevArr, deleted, markDirty){
+    const prevMap = new Map((Array.isArray(prevArr) ? prevArr : []).filter(x=>x && x.id).map(x=>[String(x.id), x]));
+    const seen = new Set();
+    const out = [];
+    (Array.isArray(arr) ? arr : []).forEach((item)=>{
+      if(!item || typeof item !== 'object') return;
+      const x = {...item};
+      if(!x.id) x.id = makeId(coll);
+      x.id = String(x.id);
+      if(seen.has(x.id)) return;
+      seen.add(x.id);
+      if(x._deleted || x.deletedAt){ noteDeletion(deleted, coll, x.id, x.deletedAt || x._updatedAt || now()); return; }
+      if(deleted?.[coll]?.[x.id]) return;
+      const p = prevMap.get(x.id);
+      if(!x.createdAt && p?.createdAt) x.createdAt = p.createdAt;
+      if(!x.createdAt) x.createdAt = now();
+      const changed = !p || stableString(p) !== stableString(x);
+      if(markDirty && changed){
+        x._updatedAt = now();
+        x._syncSeq = nextSeq();
+        x._dirty = true;
+      }else if(!x._updatedAt){
+        x._updatedAt = p?._updatedAt || p?.updatedAt || x.createdAt || now();
+      }
+      out.push(x);
     });
-
+    return out;
+  }
+  function normalizeDB(input, prev, opts){
+    const db = clone(input || {});
+    const before = prev || {};
+    const markDirty = opts?.markDirty !== false;
+    db.settings = {...(db.settings || {})};
+    db.settings.companyKey = db.settings.companyKey || before?.settings?.companyKey || companyKey() || DEFAULT_COMPANY;
+    const deleted = mergeDeleted(before, db);
+    if(opts?.detectDeletes !== false) detectDeleted(before, db, deleted);
+    const keys = Array.from(new Set([...KNOWN_ARRAYS, ...allKeys(before,db).filter(k=>Array.isArray(before?.[k]) || Array.isArray(db?.[k]))]));
+    keys.forEach(k=>{ db[k] = normalizeArray(db[k] || [], k, before[k] || [], deleted, markDirty); });
+    if(!db.accounts.some(a=>a && a.id === 'cash-main')){
+      db.accounts.unshift({id:'cash-main',name:'الصندوق الرئيسي',code:'1001',type:'الأصول المتداولة',balance:0,openingBalance:0,active:'نشط',createdAt:now(),_updatedAt:now(),_syncSeq:nextSeq()});
+    }
+    db.__deleted = deleted;
+    db._deletedIds = deleted;
+    db.lastLocalUpdate = db.lastLocalUpdate || now();
+    return db;
+  }
+  function assignGlobal(db){
+    window.DB = db;
+    try{ DB = db; }catch(e){}
+  }
+  function commitLocal(db, opts){
+    const prev = readLocal();
+    const normalized = normalizeDB(db || prev, prev, opts || {});
+    normalized.lastLocalUpdate = now();
+    writeRaw(normalized);
+    assignGlobal(normalized);
+    try{ if(typeof updateSyncState === 'function') updateSyncState(); }catch(e){}
+    if(!opts || opts.sync !== false) scheduleSync();
+    return normalized;
+  }
+  function purgeDeleted(db){
+    const deleted = mergeDeleted(db, db);
     Object.keys(deleted).forEach(coll=>{
       const ids = deleted[coll] || {};
-      if(Array.isArray(next[coll])) next[coll] = next[coll].filter(row=>!row || !row.id || !ids[row.id]);
-      Object.keys(ids).forEach(id=>rememberDeleted(next, coll, id, ids[id]));
+      if(Array.isArray(db[coll])) db[coll] = db[coll].filter(x=>!x || !x.id || !ids[String(x.id)]);
     });
-
-    next.settings = next.settings || {};
-    next.settings.companyKey = next.settings.companyKey || prev?.settings?.companyKey || FALLBACK_COMPANY;
-    next.lastLocalUpdate = t;
-    return next;
+    db.__deleted = deleted;
+    db._deletedIds = deleted;
+    return db;
   }
-
-  function mergeArrays(localArr, cloudArr, coll, deleted){
-    const map = new Map();
-    const del = (deleted && deleted[coll]) || {};
-    function add(row, source){
-      if(!row || typeof row !== 'object') return;
-      if(row.id && (del[row.id] || row._deleted || row.deletedAt)) return;
-      if(!row.id){
-        const key = 'noid:' + JSON.stringify(row);
-        if(!map.has(key)) map.set(key, row);
-        return;
-      }
-      const key = String(row.id);
-      const old = map.get(key);
-      if(!old){ map.set(key, {...row}); return; }
-      const nt = rowTime(row), ot = rowTime(old);
-      // عند تساوي الوقت نخلي المحلي يغلب، لأن المستخدم ضغط حفظ الآن وقد لا تكون الصفحات القديمة كتبت تاريخ تحديث.
-      if(nt > ot || (nt === ot && source === 'local')) map.set(key, {...old, ...row});
-    }
-    (cloudArr || []).forEach(row=>add(row,'cloud'));
-    (localArr || []).forEach(row=>add(row,'local'));
-    return Array.from(map.values()).sort((a,b)=>String(b._updatedAt||b.updatedAt||b.createdAt||b.date||'').localeCompare(String(a._updatedAt||a.updatedAt||a.createdAt||a.date||'')));
-  }
-
-  function mergeDB(local, cloud){
-    local = normalizeLocalChange(local || {}, readLocal());
-    cloud = clone(cloud || {});
-    const deleted = mergeDeleted(cloud, local);
-    const out = {...cloud, ...local};
-    const keys = new Set([...Object.keys(cloud), ...Object.keys(local)]);
-    keys.forEach(k=>{
-      if(Array.isArray(cloud[k]) || Array.isArray(local[k])){
-        out[k] = mergeArrays(local[k] || [], cloud[k] || [], k, deleted);
-      }else if(isObj(cloud[k]) || isObj(local[k])){
-        out[k] = {...(cloud[k] || {}), ...(local[k] || {})};
-      }
+  function sanitizeFirebase(v){
+    if(v === undefined || typeof v === 'function' || typeof v === 'symbol') return null;
+    if(v === null || typeof v !== 'object') return v;
+    if(Array.isArray(v)) return v.map(sanitizeFirebase);
+    const out = {};
+    Object.keys(v).forEach(k=>{
+      const safeKey = String(k).replace(/[.#$\[\]\/]/g,'_');
+      out[safeKey] = sanitizeFirebase(v[k]);
     });
-    out.settings = {...(cloud.settings || {}), ...(local.settings || {})};
-    out.settings.companyKey = out.settings.companyKey || local?.settings?.companyKey || cloud?.settings?.companyKey || FALLBACK_COMPANY;
-    out.__deleted = {};
-    out._deletedIds = {};
-    Object.keys(deleted).forEach(coll=>{
-      out.__deleted[coll] = {...(deleted[coll] || {})};
-      out._deletedIds[coll] = {...(deleted[coll] || {})};
-      if(Array.isArray(out[coll])) out[coll] = out[coll].filter(row=>!row || !row.id || !deleted[coll][row.id]);
-    });
-    out.lastSyncAt = now();
     return out;
   }
-
-  function scheduleAutoSync(delay){
-    if(internalWrite) return;
-    clearTimeout(autoTimer);
-    autoTimer = setTimeout(runAutoSync, delay || 450);
-  }
-
-  async function runAutoSync(){
-    if(!navigator.onLine || !window.FirebaseBridge) return;
-    if(autoBusy){ autoPending = true; return; }
-    autoBusy = true;
-    try{
-      const local = readLocal();
-      if(local && Object.keys(local).length) await window.FirebaseBridge.sync(local, {companyKey:local?.settings?.companyKey});
-    }catch(e){ console.warn('Oskar Firebase auto sync skipped:', e); }
-    finally{
-      autoBusy = false;
-      if(autoPending){ autoPending = false; scheduleAutoSync(300); }
+  async function getCloud(companyKeyArg){
+    const r = await fetch(firebaseURL(companyKeyArg), {cache:'no-store'});
+    if(!r.ok){
+      const txt = await r.text().catch(()=>r.statusText);
+      throw new Error('Firebase pull failed: '+r.status+' '+txt);
     }
+    return await r.json() || {};
+  }
+  async function putCloud(data, companyKeyArg){
+    const payload = JSON.stringify(sanitizeFirebase(data || {}));
+    const r = await fetch(firebaseURL(companyKeyArg), {method:'PUT',headers:{'Content-Type':'application/json'},body:payload});
+    if(!r.ok){
+      const txt = await r.text().catch(()=>r.statusText);
+      throw new Error('Firebase push failed: '+r.status+' '+txt);
+    }
+    return await r.json();
+  }
+  function mergeArrays(localArr, cloudArr, coll, deleted){
+    const map = new Map();
+    function put(item, source){
+      if(!item || typeof item !== 'object' || !item.id) return;
+      const id = String(item.id);
+      const delAt = Date.parse(deleted?.[coll]?.[id] || '') || 0;
+      const itemAt = stampValue(item);
+      if(item._deleted || item.deletedAt || (delAt && delAt >= itemAt)) return;
+      const old = map.get(id);
+      if(!old || itemAt >= stampValue(old) || source === 'local') map.set(id, {...old, ...item, id});
+    }
+    (Array.isArray(cloudArr) ? cloudArr : []).forEach(x=>put(x,'cloud'));
+    (Array.isArray(localArr) ? localArr : []).forEach(x=>put(x,'local'));
+    return Array.from(map.values()).sort((a,b)=>stampValue(b)-stampValue(a));
+  }
+  function mergeDB(local, cloud){
+    const localNorm = normalizeDB(local || {}, {}, {markDirty:false, detectDeletes:false});
+    const cloudNorm = normalizeDB(cloud || {}, {}, {markDirty:false, detectDeletes:false});
+    const deleted = mergeDeleted(localNorm, cloudNorm);
+    const out = {...cloudNorm, ...localNorm};
+    const keys = Array.from(new Set([...KNOWN_ARRAYS, ...allKeys(localNorm,cloudNorm).filter(k=>Array.isArray(localNorm?.[k]) || Array.isArray(cloudNorm?.[k]))]));
+    keys.forEach(k=>{ out[k] = mergeArrays(localNorm[k] || [], cloudNorm[k] || [], k, deleted); });
+    out.settings = {...(cloudNorm.settings || {}), ...(localNorm.settings || {})};
+    out.settings.companyKey = out.settings.companyKey || localNorm?.settings?.companyKey || cloudNorm?.settings?.companyKey || companyKey() || DEFAULT_COMPANY;
+    out.__deleted = deleted;
+    out._deletedIds = deleted;
+    out.lastSyncAt = now();
+    out.lastLocalUpdate = localNorm.lastLocalUpdate || now();
+    return purgeDeleted(out);
+  }
+  function scheduleSync(){
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(async()=>{
+      if(!navigator.onLine || !window.FirebaseBridge) return;
+      try{ await window.FirebaseBridge.sync(readLocal(), {silent:true}); }
+      catch(e){ console.warn('OSKAR background sync skipped:', e); }
+    }, 900);
   }
 
-  // نراقب حفظ بيانات البرنامج فقط. أي حفظ/تعديل/حذف محلي يمر من هنا بدون لمس كود الصفحات.
+  // يلتقط أي حفظ مباشر من الصفحات، ويضيف طابع تعديل/حذف قبل التخزين.
   Storage.prototype.setItem = function(key, value){
-    if(key === APP_KEY && !internalWrite){
-      const prev = readLocal();
-      const normalized = normalizeLocalChange(parse(value), prev);
-      originalSetItem.call(this, key, JSON.stringify(normalized));
-      scheduleAutoSync(350);
+    if(this === localStorage && key === APP_KEY && !internalWrite){
+      try{
+        const prev = readLocal();
+        const incoming = safeJSON(String(value || '{}'), {});
+        const normalized = normalizeDB(incoming, prev, {markDirty:true, detectDeletes:true});
+        const changed = stableString(prev) !== stableString(normalized);
+        value = JSON.stringify(normalized);
+        assignGlobal(normalized);
+        const res = nativeSet.call(this, key, value);
+        if(changed) scheduleSync();
+        return res;
+      }catch(e){ console.warn('OSKAR local save guard fallback:', e); }
+    }
+    return nativeSet.call(this, key, value);
+  };
+  Storage.prototype.removeItem = function(key){
+    if(this === localStorage && key === APP_KEY && !internalWrite){
+      console.warn('OSKAR blocked removing main DB key to protect data.');
       return;
     }
-    return originalSetItem.call(this, key, value);
+    return nativeRemove.call(this, key);
   };
 
   window.FirebaseBridge = {
     config: firebaseConfig,
-    root: companyRoot,
-    async pullWithKey(companyKey){
-      const cloud = await getCloud(companyKey);
+    root: companyKey,
+    readLocal,
+    commitLocal,
+    mergeDB,
+    async pullWithKey(key){
+      const cloud = await getCloud(key);
       if(cloud && Object.keys(cloud).length){
-        const merged = mergeDB(readLocal(), cloud);
-        writeLocal(merged);
-        try{ if(typeof window.DB === 'object') window.DB = merged; }catch(e){}
-        return merged;
+        const normalized = normalizeDB(cloud, {}, {markDirty:false, detectDeletes:false});
+        normalized.settings = {...(normalized.settings||{}), companyKey: companyKey(key)};
+        writeRaw(normalized);
+        assignGlobal(normalized);
+        return normalized;
       }
       return cloud || {};
     },
-    async pushWithKey(companyKey){
-      const db = normalizeLocalChange(readLocal(), readLocal());
-      writeLocal(db);
-      await putCloud(db, companyKey || db?.settings?.companyKey);
-      return db;
+    async pushWithKey(key){
+      return await this.sync(readLocal(), {companyKey:key});
     },
-    async sync(localDB, opts={}){
-      const base = normalizeLocalChange(localDB || readLocal(), readLocal());
-      if(!navigator.onLine){ writeLocal(base); return base; }
-      let cloud = {};
-      try{ cloud = await getCloud(opts.companyKey || base?.settings?.companyKey); }catch(e){ cloud = {}; }
-      const merged = mergeDB(base, cloud);
-      writeLocal(merged);
-      await putCloud(merged, opts.companyKey || merged?.settings?.companyKey);
-      try{ if(typeof window.DB === 'object') window.DB = merged; }catch(e){}
+    async sync(localDB, opts){
+      if(!navigator.onLine) return commitLocal(localDB || readLocal(), {sync:false});
+      const local = commitLocal(localDB || readLocal(), {sync:false});
+      const key = opts?.companyKey || local?.settings?.companyKey || companyKey();
+      const cloud = await getCloud(key).catch(err=>{
+        if(opts?.silent) console.warn('OSKAR pull failed, trying push-safe merge with local only:', err);
+        return {};
+      });
+      const merged = mergeDB(local, cloud || {});
+      merged.settings = {...(merged.settings||{}), companyKey: companyKey(key)};
+      await putCloud(merged, key);
+      merged.lastSyncAt = now();
+      merged.lastLocalUpdate = now();
+      writeRaw(merged);
+      assignGlobal(merged);
+      try{ if(typeof updateSyncState === 'function') updateSyncState(); }catch(e){}
       return merged;
     },
     async pull(){ return await this.pullWithKey(readLocal()?.settings?.companyKey); },
-    async push(){ return await this.pushWithKey(readLocal()?.settings?.companyKey); },
-    _mergeDB: mergeDB,
-    _normalizeLocalChange: normalizeLocalChange
+    async push(){ return await this.pushWithKey(readLocal()?.settings?.companyKey); }
   };
 
-  window.addEventListener('online',()=>scheduleAutoSync(250));
+  function installRuntimePatches(){
+    window.__OSKAR_RUNTIME_SAVE_PATCHED_V3__ = true;
 
-  // بعد ما تنتهي الصفحة من تعريف saveDB/persist/syncNow نغلفها فقط، بدون تغيير منطق الموقع.
-  function patchPageSaveFunctions(){
-    if(typeof window.saveDB === 'function' && !window.saveDB.__oskarSyncWrapped){
-      const oldSaveDB = window.saveDB;
-      const wrappedSaveDB = function(db){
-        const res = oldSaveDB.apply(this, arguments);
+    window.saveDB = function(db){ return commitLocal(db || readLocal(), {sync:true}); };
+    try{ saveDB = window.saveDB; }catch(e){}
+
+    window.collection = function(name){
+      const db = (function(){ try{ return DB || window.DB || readLocal(); }catch(e){ return window.DB || readLocal(); } })();
+      if(!Array.isArray(db[name])) db[name] = [];
+      assignGlobal(db);
+      return db[name];
+    };
+    try{ collection = window.collection; }catch(e){}
+
+    window.persist = function(){
+      let db; try{ db = DB || window.DB || readLocal(); }catch(e){ db = window.DB || readLocal(); }
+      return commitLocal(db, {sync:true});
+    };
+    try{ persist = window.persist; }catch(e){}
+
+    window.syncNow = async function(show=true){
+      const btn = document.querySelector('.top-actions button[onclick*="syncNow"], button[onclick*="syncNow"]');
+      try{
+        if(btn) btn.classList.add('syncing');
+        if(!navigator.onLine){ if(show && typeof toast === 'function') toast('لا يوجد اتصال، البيانات محفوظة محليًا'); return readLocal(); }
+        const db = await window.FirebaseBridge.sync((function(){ try{return DB || window.DB || readLocal();}catch(e){return window.DB || readLocal();} })(), {});
+        assignGlobal(db);
+        if(show && typeof toast === 'function') toast('تمت المزامنة مع Firebase');
+        try{ if(typeof renderPage === 'function') renderPage(); }catch(e){}
+        return db;
+      }catch(e){
+        console.error('OSKAR sync failed:', e);
+        if(show && typeof toast === 'function') toast('تعذر المزامنة، تحقق من اتصال Firebase أو صلاحيات قاعدة البيانات');
+        return readLocal();
+      }finally{ if(btn) btn.classList.remove('syncing'); }
+    };
+    try{ syncNow = window.syncNow; }catch(e){}
+
+    // تقوية الحفظ العام في صفحات CRUD مثل الموردين والعملاء والفئات بدون تغيير الواجهة.
+    if(typeof window.saveCrud === 'function' || (typeof saveCrud !== 'undefined')){
+      const oldSaveCrud = (typeof saveCrud === 'function') ? saveCrud : window.saveCrud;
+      window.saveCrud = function(){
         try{
-          const latest = normalizeLocalChange(db || readLocal(), readLocal());
-          writeLocal(latest);
-          if(db && typeof db === 'object') Object.assign(db, latest);
-          try{ window.DB = latest; }catch(e){}
-          scheduleAutoSync(350);
-        }catch(e){ console.warn('saveDB sync patch skipped:', e); }
-        return res;
+          const cfg = (typeof CFG !== 'undefined' ? CFG : (window.PAGE_CONFIG || {}));
+          const form = document.getElementById('crudForm');
+          if(form && cfg && cfg.collection){
+            const fd = new FormData(form);
+            const data = Object.fromEntries(fd.entries());
+            const permList = fd.getAll('perm').filter(Boolean);
+            if(fd.get('allPerms')) data.permissions = ['*'];
+            else if(permList.length) data.permissions = permList;
+            const wasEdit = !!data.id;
+            let db; try{ db = DB || window.DB || readLocal(); }catch(e){ db = window.DB || readLocal(); }
+            if(!Array.isArray(db[cfg.collection])) db[cfg.collection] = [];
+            const arr = db[cfg.collection];
+            if(data.id){
+              const idx = arr.findIndex(x=>String(x.id) === String(data.id));
+              if(idx >= 0) arr[idx] = {...arr[idx], ...data, updatedAt: (typeof nowText === 'function' ? nowText() : now()), _updatedAt: now(), _syncSeq: nextSeq(), _dirty:true};
+              else arr.unshift({...data, id:String(data.id), createdAt:now(), _updatedAt:now(), _syncSeq:nextSeq(), _dirty:true});
+            }else{
+              data.id = (typeof uid === 'function' ? uid(cfg.collection) : makeId(cfg.collection));
+              data.createdAt = (typeof nowText === 'function' ? nowText() : now());
+              data.createdBy = (typeof currentUser === 'function' ? currentUser().name : 'مدير النظام');
+              data._updatedAt = now(); data._syncSeq = nextSeq(); data._dirty = true;
+              arr.unshift(data);
+            }
+            assignGlobal(db);
+            commitLocal(db, {sync:true});
+            try{ if(typeof logAction === 'function') logAction(wasEdit ? 'تعديل' : 'إضافة', cfg.title || cfg.collection, data.name || data.id); }catch(e){}
+            try{ if(typeof closeModal === 'function') closeModal(); }catch(e){}
+            try{ if(typeof renderPage === 'function') renderPage(); }catch(e){}
+            try{ if(typeof toast === 'function') toast('تم الحفظ'); }catch(e){}
+            return;
+          }
+        }catch(e){ console.warn('OSKAR CRUD guard fallback:', e); }
+        return oldSaveCrud && oldSaveCrud.apply(this, arguments);
       };
-      wrappedSaveDB.__oskarSyncWrapped = true;
-      wrappedSaveDB.__oskarOriginal = oldSaveDB;
-      window.saveDB = wrappedSaveDB;
+      try{ saveCrud = window.saveCrud; }catch(e){}
     }
 
-    if(typeof window.persist === 'function' && !window.persist.__oskarSyncWrapped){
-      const oldPersist = window.persist;
-      const wrappedPersist = function(){
-        const res = oldPersist.apply(this, arguments);
+    if(typeof window.deleteRec === 'function' || (typeof deleteRec !== 'undefined')){
+      const oldDeleteRec = (typeof deleteRec === 'function') ? deleteRec : window.deleteRec;
+      window.deleteRec = function(id){
         try{
-          const latest = normalizeLocalChange((typeof window.DB === 'object' && window.DB) ? window.DB : readLocal(), readLocal());
-          writeLocal(latest);
-          try{ window.DB = latest; }catch(e){}
-          scheduleAutoSync(300);
-        }catch(e){ console.warn('persist sync patch skipped:', e); }
-        return res;
+          const cfg = (typeof CFG !== 'undefined' ? CFG : (window.PAGE_CONFIG || {}));
+          if(cfg && cfg.collection){
+            if(!confirm('تأكيد الحذف؟')) return;
+            let db; try{ db = DB || window.DB || readLocal(); }catch(e){ db = window.DB || readLocal(); }
+            if(!Array.isArray(db[cfg.collection])) db[cfg.collection] = [];
+            const beforeLen = db[cfg.collection].length;
+            db.__deleted = db.__deleted || {}; db._deletedIds = db._deletedIds || {};
+            noteDeletion(db.__deleted, cfg.collection, String(id), now());
+            noteDeletion(db._deletedIds, cfg.collection, String(id), now());
+            db[cfg.collection] = db[cfg.collection].filter(x=>!x || String(x.id) !== String(id));
+            assignGlobal(db);
+            commitLocal(db, {sync:true});
+            try{ if(typeof logAction === 'function') logAction('حذف', cfg.title || cfg.collection, id); }catch(e){}
+            try{ if(typeof renderPage === 'function') renderPage(); }catch(e){}
+            try{ if(typeof toast === 'function') toast(beforeLen ? 'تم الحذف' : 'تم'); }catch(e){}
+            return;
+          }
+        }catch(e){ console.warn('OSKAR delete guard fallback:', e); }
+        return oldDeleteRec && oldDeleteRec.apply(this, arguments);
       };
-      wrappedPersist.__oskarSyncWrapped = true;
-      wrappedPersist.__oskarOriginal = oldPersist;
-      window.persist = wrappedPersist;
-    }
-
-    if(!window.syncNow || !window.syncNow.__oskarSyncWrapped){
-      const oldSyncNow = window.syncNow;
-      const wrappedSyncNow = async function(show=true){
-        const btn = document.querySelector('.top-actions button[onclick*="syncNow"],.top-actions button[title*="مزامنة"],button[onclick*="syncNow"]');
-        try{
-          if(btn) btn.classList.add('syncing');
-          const local = normalizeLocalChange((typeof window.DB === 'object' && window.DB) ? window.DB : readLocal(), readLocal());
-          writeLocal(local);
-          if(!navigator.onLine){ if(show && window.toast) toast('لا يوجد اتصال، البيانات محفوظة محليًا'); return local; }
-          const synced = await window.FirebaseBridge.sync(local, {companyKey:local?.settings?.companyKey});
-          try{ window.DB = synced; }catch(e){}
-          if(show && window.toast) toast('تمت المزامنة مع Firebase');
-          try{ if(typeof renderPage === 'function') renderPage(); }catch(e){}
-          return synced;
-        }catch(e){
-          console.warn(e);
-          if(show && window.toast) toast('تعذر المزامنة، البيانات محفوظة محليًا');
-          if(oldSyncNow && oldSyncNow !== wrappedSyncNow){ try{return await oldSyncNow(show);}catch(_){} }
-          return readLocal();
-        }finally{
-          if(btn) btn.classList.remove('syncing');
-        }
-      };
-      wrappedSyncNow.__oskarSyncWrapped = true;
-      wrappedSyncNow.__oskarOriginal = oldSyncNow;
-      window.syncNow = wrappedSyncNow;
+      try{ deleteRec = window.deleteRec; }catch(e){}
     }
   }
 
-  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(patchPageSaveFunctions,0),{once:true});
-  else setTimeout(patchPageSaveFunctions,0);
-  [80,250,700,1500].forEach(ms=>setTimeout(patchPageSaveFunctions,ms));
+  function latePatch(){
+    installRuntimePatches();
+    try{ assignGlobal(normalizeDB((function(){try{return DB||window.DB||readLocal()}catch(e){return window.DB||readLocal()}})(), readLocal(), {markDirty:false, detectDeletes:false})); }catch(e){}
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', latePatch, {once:true});
+  else latePatch();
+  [80,300,900,1800].forEach(ms=>setTimeout(latePatch, ms));
+  window.addEventListener('online', ()=>scheduleSync());
 })();
 
 
@@ -434,7 +489,6 @@ const firebaseConfig = {
     setHomeOpenOnly();
   }
 
-  // لأن الصفحات تعيد رسم القائمة أكثر من مرة، نطبّق الوضع الافتراضي بعد الرسم فقط.
   function scheduleInitial(){
     [0,80,220,500,900].forEach(ms=>setTimeout(applyInitialMobileState,ms));
   }
