@@ -83,3 +83,100 @@ const firebaseConfig = {
     async push(){ return await this.pushWithKey(readLocal()?.settings?.companyKey); }
   };
 })();
+
+// إصلاح نهائي لسلوك القائمة الجانبية بدون تعديل الهيدر أو الشريط السفلي
+// المطلوب: القائمة نفسها تبدأ مغلقة، وعند فتحها يكون قسم "الرئيسية" فقط مفتوحًا تلقائيًا.
+(function(){
+  if(window.__OSKAR_DRAWER_INITIAL_STATE_FIX__) return;
+  window.__OSKAR_DRAWER_INITIAL_STATE_FIX__ = true;
+
+  const STYLE_ID = 'oskar-drawer-initial-state-fix-style';
+  function addStyle(){
+    if(document.getElementById(STYLE_ID)) return;
+    const st = document.createElement('style');
+    st.id = STYLE_ID;
+    st.textContent = `
+      /* اجعل القائمة الجانبية مغلقة افتراضيًا حتى على الشاشات الكبيرة */
+      .drawer{transform:translateX(105%)!important;will-change:transform!important;transition:transform .2s cubic-bezier(.2,.8,.2,1)!important;}
+      .drawer.open{transform:translateX(0)!important;}
+      .drawer-overlay{display:none!important;}
+      .drawer-overlay.show{display:block!important;}
+      .page{margin-right:auto!important;margin-left:auto!important;}
+      .topbar .menu-open,.fab{display:flex!important;align-items:center!important;justify-content:center!important;}
+      .menu-group:not(.open)>.submenu{display:none!important;}
+      .menu-group.open>.submenu{display:block!important;}
+      @media(min-width:1100px){
+        .drawer{top:48px!important;height:calc(100vh - 48px)!important;width:280px!important;box-shadow:-8px 0 28px rgba(0,0,0,.18)!important;border-left:1px solid var(--line,#dce8e2)!important;}
+        .drawer-brand{display:none!important;}
+        .drawer-overlay.show{display:block!important;}
+        .page{margin-right:auto!important;}
+      }
+    `;
+    document.head.appendChild(st);
+  }
+
+  function txt(el){ return String(el && el.textContent || '').replace(/\s+/g,' ').trim(); }
+  function getDrawer(){ return document.getElementById('drawer') || document.querySelector('.drawer'); }
+  function getOverlay(){ return document.getElementById('drawerOverlay') || document.querySelector('.drawer-overlay'); }
+
+  function resetSubmenusToHomeOnly(){
+    const drawer = getDrawer();
+    if(!drawer) return;
+    const groups = Array.from(drawer.querySelectorAll('.menu-group'));
+    if(!groups.length) return;
+    groups.forEach(g => g.classList.remove('open'));
+    const home = groups.find(g => txt(g.querySelector('.menu-head b')) === 'الرئيسية') || groups[0];
+    if(home) home.classList.add('open');
+  }
+
+  function reallyCloseDrawer(){
+    addStyle();
+    const drawer = getDrawer();
+    const overlay = getOverlay();
+    if(drawer) drawer.classList.remove('open');
+    if(overlay) overlay.classList.remove('show');
+    document.documentElement.classList.remove('drawer-open');
+    document.body && document.body.classList.remove('drawer-open');
+  }
+
+  function reallyOpenDrawer(){
+    addStyle();
+    resetSubmenusToHomeOnly();
+    const drawer = getDrawer();
+    const overlay = getOverlay();
+    if(drawer) drawer.classList.add('open');
+    if(overlay) overlay.classList.add('show');
+    document.documentElement.classList.add('drawer-open');
+    document.body && document.body.classList.add('drawer-open');
+  }
+
+  function installOverrides(){
+    addStyle();
+    window.openDrawer = reallyOpenDrawer;
+    window.closeDrawer = reallyCloseDrawer;
+    window.toggleMenu = function(btn){
+      const group = btn && btn.closest ? btn.closest('.menu-group') : null;
+      if(!group) return;
+      group.classList.toggle('open');
+    };
+  }
+
+  function applyInitialState(){
+    installOverrides();
+    resetSubmenusToHomeOnly();
+    reallyCloseDrawer();
+  }
+
+  // طبّق الإصلاح بعد تحميل كل سكربتات الصفحة، لأن الصفحات تعيد تعريف renderCommon/toggleMenu.
+  function boot(){
+    applyInitialState();
+    setTimeout(applyInitialState, 60);
+    setTimeout(applyInitialState, 250);
+    setTimeout(applyInitialState, 700);
+  }
+
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+
+  window.addEventListener('load', function(){ setTimeout(applyInitialState, 120); });
+})();
