@@ -83,3 +83,93 @@ const firebaseConfig = {
     async push(){ return await this.pushWithKey(readLocal()?.settings?.companyKey); }
   };
 })();
+
+
+/* ===== OSKAR MOBILE SIDEBAR FIX - 2026-05-08 ===== */
+(function(){
+  if(window.__OSKAR_MOBILE_SIDEBAR_FIX__) return;
+  window.__OSKAR_MOBILE_SIDEBAR_FIX__ = true;
+
+  // إصلاح الجوال فقط: الدرج يبدأ مغلقاً، والديسكتوب يبقى ظاهر طبيعي.
+  const css = `
+    @media (max-width:1099.98px){
+      html body .drawer:not(.open){
+        transform:translateX(105%) translateZ(0) !important;
+        visibility:visible !important;
+      }
+      html body .drawer.open{
+        transform:translateX(0) translateZ(0) !important;
+        visibility:visible !important;
+      }
+      html body .drawer-overlay:not(.show){display:none !important;}
+      html body .drawer-overlay.show{display:block !important;}
+    }
+    @media (min-width:1100px){
+      html body .drawer{
+        transform:none !important;
+        right:0 !important;
+        top:48px !important;
+        width:280px !important;
+        height:calc(100vh - 48px) !important;
+      }
+      html body .drawer-overlay{display:none !important;}
+      html body .page{margin-right:280px !important;}
+      html body .fab, html body .topbar .menu-open{display:none !important;}
+    }
+  `;
+  function installStyle(){
+    if(document.getElementById('oskar-mobile-sidebar-fix-style')) return;
+    const st=document.createElement('style');
+    st.id='oskar-mobile-sidebar-fix-style';
+    st.textContent=css;
+    (document.head || document.documentElement).appendChild(st);
+  }
+  installStyle();
+
+  const isMobile = () => window.matchMedia && window.matchMedia('(max-width:1099.98px)').matches;
+
+  function setHomeOpenOnly(){
+    const drawer=document.getElementById('drawer') || document.querySelector('.drawer');
+    if(!drawer || !isMobile()) return;
+    drawer.querySelectorAll('.menu-group').forEach(group=>{
+      const title=String(group.querySelector('.menu-head b')?.textContent || '').trim();
+      if(title === 'الرئيسية') group.classList.add('open');
+      else group.classList.remove('open');
+    });
+  }
+
+  function closeMobileDrawerOnStart(){
+    if(!isMobile()) return;
+    const drawer=document.getElementById('drawer') || document.querySelector('.drawer');
+    const overlay=document.getElementById('drawerOverlay') || document.querySelector('.drawer-overlay');
+    if(drawer) drawer.classList.remove('open');
+    if(overlay) overlay.classList.remove('show');
+  }
+
+  function applyInitialMobileState(){
+    installStyle();
+    closeMobileDrawerOnStart();
+    setHomeOpenOnly();
+  }
+
+  // لأن الصفحات تعيد رسم القائمة أكثر من مرة، نطبّق الوضع الافتراضي بعد الرسم فقط.
+  function scheduleInitial(){
+    [0,80,220,500,900].forEach(ms=>setTimeout(applyInitialMobileState,ms));
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded',scheduleInitial,{once:true});
+  }else{
+    scheduleInitial();
+  }
+
+  window.addEventListener('resize',()=>{
+    installStyle();
+    if(!isMobile()){
+      const drawer=document.getElementById('drawer') || document.querySelector('.drawer');
+      const overlay=document.getElementById('drawerOverlay') || document.querySelector('.drawer-overlay');
+      if(drawer) drawer.classList.remove('open');
+      if(overlay) overlay.classList.remove('show');
+    }
+  });
+})();
