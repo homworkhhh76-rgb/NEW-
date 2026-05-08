@@ -255,4 +255,64 @@ async function login(){
 })();
 </script>
 
+
+<script id="oskar-login-password-firebase-final-fix">
+(function(){
+  const APP='supermarket_pos_ar_v1';
+  const DEFAULT_PASS='0000000000@@';
+  const $=id=>document.getElementById(id);
+  const clean=v=>String(v||'').trim();
+  const norm=v=>clean(v).toLowerCase();
+  function load(){try{return JSON.parse(localStorage.getItem(APP)||'{}')||{}}catch(e){return {}}}
+  function save(db){localStorage.setItem(APP,JSON.stringify(db||{}));try{window.DB=db}catch(e){}}
+  function msg(m){try{window.toast?toast(m):alert(m)}catch(e){alert(m)}}
+  async function pullCompany(key){if(window.FirebaseBridge&&navigator.onLine){try{await window.FirebaseBridge.pullWithKey(key)}catch(e){console.warn(e)}}return load()}
+  async function saveManagerPassword(db,key,newPass){
+    const pass=clean(newPass);
+    if(!pass||pass===DEFAULT_PASS||pass.length<6){msg('كلمة المرور الجديدة غير صالحة');return false}
+    db.settings=db.settings||{};
+    db.settings.managerPassword=pass;
+    db.settings.forcePasswordChange=false;
+    db.settings._updatedAt=new Date().toISOString();
+    db.lastLocalUpdate=db.settings._updatedAt;
+    save(db);
+    if(window.FirebaseBridge&&navigator.onLine){
+      try{
+        if(typeof window.FirebaseBridge.updateManagerPassword==='function') await window.FirebaseBridge.updateManagerPassword(pass,key);
+        else await window.FirebaseBridge.pushWithKey(key);
+      }catch(e){console.warn(e);msg('تعذر حفظ كلمة المرور في Firebase، تأكد من الاتصال وصلاحيات قاعدة البيانات');return false}
+    }
+    msg('تم تغيير كلمة المرور وحفظها في Firebase');
+    return true;
+  }
+  window.login=async function(){
+    let db=load();db.settings=db.settings||{};
+    const role=($('role')&&$('role').value)||'manager';
+    const pass=clean(($('password')&&$('password').value)||'');
+    const user=norm(($('username')&&$('username').value)||'');
+    const key=clean(($('companyKey')&&$('companyKey').value)||db.settings.companyKey||'SUPER-0001')||'SUPER-0001';
+    db=await pullCompany(key);db.settings=db.settings||{};
+    if(role==='manager'){
+      if(key!==clean(db.settings.companyKey||'SUPER-0001'))return msg('مفتاح الشركة غير صحيح');
+      const saved=clean(db.settings.managerPassword||DEFAULT_PASS);
+      if(pass!==saved)return msg('كلمة مرور المدير غير صحيحة');
+      if(db.settings.forcePasswordChange||saved===DEFAULT_PASS){
+        const p=prompt('يجب تغيير كلمة مرور المدير الآن. اكتب كلمة مرور جديدة:');
+        if(!(await saveManagerPassword(db,key,p)))return;
+      }
+      localStorage.setItem('currentUser',JSON.stringify({id:'manager',name:'مدير النظام',username:'admin',role:'Admin',permissions:['*'],active:'نشط',companyKey:key,managerId:'manager'}));
+      location.href='لوحة-المتابعة.html';
+      return;
+    }
+    const employees=Array.isArray(db.employees)?db.employees:[];
+    const emp=employees.find(e=>{
+      const names=[e.username,e.email,e.name,e.fullName,e.mobile,e.phone].map(norm);
+      const saved=clean(e.password||e.pass||e.pin||e.employeePassword||'');
+      return norm(e.active||'نشط')!=='غير نشط'&&names.includes(user)&&saved===pass;
+    });
+    if(emp){localStorage.setItem('currentUser',JSON.stringify({...emp,companyKey:db.settings.companyKey||key,managerId:'manager'}));location.href='لوحة-المتابعة.html'}
+    else msg('بيانات الموظف غير صحيحة أو الحساب غير نشط');
+  };
+})();
+</script>
 </body></html>

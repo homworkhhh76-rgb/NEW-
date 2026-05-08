@@ -18,7 +18,7 @@ const firebaseConfig = {
   const DELETE_KEYS=['__deleted','_deletedIds'];
   const META_KEYS=new Set(['lastSyncAt','lastLocalUpdate','lastCloudPull','__deleted','_deletedIds','_syncMeta']);
   const ITEM_META=new Set(['_updatedAt','_createdAt','_deleted','deletedAt','_syncStamp']);
-  const state={snapshot:null,syncTimer:null,pullTimer:null,installTimer:null,applyingRemote:false,lastLocalSaveAt:0,lastError:null,started:false};
+  const state={snapshot:null,syncTimer:null,pullTimer:null,installTimer:null,applyingRemote:false,lastLocalSaveAt:0,lastUserEditAt:0,lastError:null,started:false};
 
   function now(){return new Date().toISOString()}
   function isObj(v){return !!v && typeof v==='object' && !Array.isArray(v)}
@@ -34,6 +34,16 @@ const firebaseConfig = {
   function url(companyKey){return `${firebaseConfig.databaseURL}/${ROOT_PATH}/${currentCompanyKey(companyKey)}.json`}
   function safeToast(msg){try{if(window.toast) window.toast(msg)}catch(e){}}
   function sameJSON(a,b){try{return JSON.stringify(a)===JSON.stringify(b)}catch(e){return false}}
+  function editableElement(el){
+    if(!el) return false;
+    const tag=String(el.tagName||'').toLowerCase();
+    return tag==='input'||tag==='textarea'||tag==='select'||el.isContentEditable||!!(el.closest&&el.closest('form,.modal,.dialog,[role=dialog]'));
+  }
+  function markUserEditing(){state.lastUserEditAt=Date.now();}
+  function userIsEditing(){
+    if(editableElement(document.activeElement)) return true;
+    return Date.now()-state.lastUserEditAt<12000;
+  }
   function itemPublicCopy(x){const o={}; Object.keys(x||{}).sort().forEach(k=>{if(!ITEM_META.has(k))o[k]=x[k]}); return o}
   function itemChanged(a,b){return !sameJSON(itemPublicCopy(a||{}), itemPublicCopy(b||{}))}
   function stamp(x){return Date.parse(x?._updatedAt||x?.updatedAt||x?._createdAt||x?.createdAt||x?.deletedAt||x?.date||0)||0}
@@ -144,6 +154,30 @@ const firebaseConfig = {
   }
   async function getCloud(companyKey){return await requestJSON('GET',undefined,companyKey)||{}}
   async function putCloud(db,companyKey){return await requestJSON('PUT',normalizeDB(db||{}),companyKey)}
+  async function patchPath(path,data,companyKey){
+    const cleanPath=String(path||'').replace(/^\/+|\/+$/g,'');
+    const options={method:'PATCH',cache:'no-store',headers:{'Content-Type':'application/json','Cache-Control':'no-cache','Pragma':'no-cache'},body:JSON.stringify(data||{})};
+    const r=await fetch(`${firebaseConfig.databaseURL}/${ROOT_PATH}/${currentCompanyKey(companyKey)}/${cleanPath}.json`,options);
+    if(!r.ok){let body='';try{body=await r.text()}catch(e){}throw new Error('تعذر تحديث فايربيز: '+r.status+' '+body.slice(0,120));}
+    try{return await r.json()}catch(e){return {}}
+  }
+  async function updateManagerPassword(password,companyKey){
+    const pass=String(password||'').trim();
+    if(!pass || pass==='0000000000@@' || pass.length<6) throw new Error('كلمة المرور الجديدة غير صالحة');
+    const t=now();
+    const db=normalizeDB(readLocal());
+    db.settings=db.settings||{};
+    db.settings.managerPassword=pass;
+    db.settings.forcePasswordChange=false;
+    db.settings._updatedAt=t;
+    db.lastLocalUpdate=t;
+    writeLocal(db);
+    if(navigator.onLine){
+      await patchPath('settings',{managerPassword:pass,forcePasswordChange:false,_updatedAt:t,companyKey:db.settings.companyKey||currentCompanyKey(companyKey)},companyKey||db.settings.companyKey);
+      try{await syncCore(db,{companyKey:companyKey||db.settings.companyKey,rawLocal:true,prefer:'local'});}catch(e){console.warn(e)}
+    }
+    return db;
+  }
   async function syncCore(localDB,opts={}){
     const companyKey=opts.companyKey || localDB?.settings?.companyKey || currentCompanyKey();
     let local=opts.rawLocal?normalizeDB(localDB||readLocal()):markLocalChanges(localDB||readLocal());
@@ -165,6 +199,7 @@ const firebaseConfig = {
   }
   async function pullMerge(companyKey,render=true){
     if(!navigator.onLine) return false;
+    if(userIsEditing()) return false;
     if(Date.now()-state.lastLocalSaveAt<1800) return false;
     const before=readLocal();
     const cloud=await getCloud(companyKey||before?.settings?.companyKey).catch(e=>{state.lastError=e; return null});
@@ -175,6 +210,7 @@ const firebaseConfig = {
     return changed;
   }
   function refreshPageFromDB(){
+    if(userIsEditing()) return;
     try{window.dispatchEvent(new CustomEvent('oskar-db-updated',{detail:{source:'cloud'}}));}catch(e){}
     try{if(typeof window.loadDB==='function') window.DB=window.loadDB();}catch(e){}
     try{if(typeof window.renderPage==='function' && document.readyState!=='loading') window.renderPage();}catch(e){console.warn(e)}
@@ -197,6 +233,7 @@ const firebaseConfig = {
     async pull(){return await this.pullWithKey(readLocal()?.settings?.companyKey)},
     async push(){return await this.pushWithKey(readLocal()?.settings?.companyKey)},
     async livePull(){return await pullMerge(readLocal()?.settings?.companyKey,true)},
+    async updateManagerPassword(password,companyKey){return await updateManagerPassword(password,companyKey||readLocal()?.settings?.companyKey)},
     queueSync
   };
 
@@ -239,6 +276,10 @@ const firebaseConfig = {
     window.addEventListener('focus',()=>{if(shouldAutoSync()) pullMerge(readLocal()?.settings?.companyKey,true).catch(()=>{})});
     window.addEventListener('online',()=>{queueSync(readLocal()); pullMerge(readLocal()?.settings?.companyKey,true).catch(()=>{})});
   }
+  document.addEventListener('input',markUserEditing,true);
+  document.addEventListener('change',markUserEditing,true);
+  document.addEventListener('focusin',e=>{if(editableElement(e.target)) markUserEditing();},true);
+  document.addEventListener('keydown',e=>{if(editableElement(e.target)) markUserEditing();},true);
   state.snapshot=clone(readLocal());
   [0,80,250,600,1200,2500].forEach(ms=>setTimeout(installPageHooks,ms));
   document.addEventListener('DOMContentLoaded',()=>{installPageHooks(); setTimeout(installPageHooks,500);});
