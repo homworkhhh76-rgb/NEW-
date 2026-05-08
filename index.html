@@ -1,4 +1,29 @@
-<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><meta name="theme-color" content="#0f9f6e"><link rel="manifest" href="manifest.webmanifest"><title>تسجيل الدخول</title><script src="firebase.js"></script><style>
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><meta name="theme-color" content="#0f9f6e"><link rel="manifest" href="manifest.webmanifest"><title>تسجيل الدخول</title><script src="firebase.js"></script><script id="oskar-persistent-session">
+(function(){
+  if(window.__OSKAR_SESSION_PATCH__)return; window.__OSKAR_SESSION_PATCH__=true;
+  const USER_KEY='currentUser', SESSION_KEY='oskar_saved_login_session', DASH='لوحة-المتابعة.html';
+  const page=decodeURIComponent((location.pathname.split('/').pop()||'index.html'))||'index.html';
+  function parse(v){try{return JSON.parse(v||'null')}catch(e){return null}}
+  function valid(u){return !!(u&&typeof u==='object'&&(u.id||u.username||u.name||u.email)&&u.active!=='غير نشط'&&!u._deleted&&!u.deletedAt)}
+  function nativeSet(k,v){try{return Storage.prototype.__oskarNativeSet?Storage.prototype.__oskarNativeSet.call(localStorage,k,v):localStorage.setItem(k,v)}catch(e){}}
+  function nativeRemove(k){try{return Storage.prototype.__oskarNativeRemove?Storage.prototype.__oskarNativeRemove.call(localStorage,k):localStorage.removeItem(k)}catch(e){}}
+  function saveSession(u){if(!valid(u))return nativeRemove(SESSION_KEY); nativeSet(SESSION_KEY,JSON.stringify({user:u,savedAt:new Date().toISOString(),version:1}));}
+  function restoreSession(){let u=parse(localStorage.getItem(USER_KEY)); if(valid(u)){saveSession(u); return u;} let s=parse(localStorage.getItem(SESSION_KEY)); u=s&&s.user; if(valid(u)){nativeSet(USER_KEY,JSON.stringify(u)); return u;} return null;}
+  const proto=Storage.prototype;
+  if(!proto.__oskarSessionPatched){
+    proto.__oskarNativeSet=proto.setItem;
+    proto.__oskarNativeRemove=proto.removeItem;
+    proto.setItem=function(k,v){const r=proto.__oskarNativeSet.apply(this,arguments); try{if(this===localStorage&&String(k)===USER_KEY){const u=parse(String(v)); if(valid(u)) proto.__oskarNativeSet.call(localStorage,SESSION_KEY,JSON.stringify({user:u,savedAt:new Date().toISOString(),version:1})); else proto.__oskarNativeRemove.call(localStorage,SESSION_KEY);}}catch(e){} return r;};
+    proto.removeItem=function(k){const r=proto.__oskarNativeRemove.apply(this,arguments); try{if(this===localStorage&&String(k)===USER_KEY) proto.__oskarNativeRemove.call(localStorage,SESSION_KEY);}catch(e){} return r;};
+    proto.__oskarSessionPatched=true;
+  }
+  window.oskarRestoreSession=restoreSession;
+  window.oskarLogout=function(){try{localStorage.removeItem(USER_KEY);localStorage.removeItem(SESSION_KEY);}catch(e){} location.replace('index.html');};
+  document.addEventListener('click',function(e){const b=e.target.closest&&e.target.closest('#logoutTopBtn,.logout-btn,[data-logout]'); if(b){try{localStorage.removeItem(USER_KEY);localStorage.removeItem(SESSION_KEY);}catch(_){} }},true);
+  const u=restoreSession();
+  if((page==='index.html'||page==='')&&valid(u)) location.replace(DASH);
+})();
+</script><style>
 :root{--green:#0f9f6e;--dark:#10251f;--bg:#edf4f1;--line:#dce8e2}*{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#06734f 0 128px,#edf4f1 128px);font-family:"Cairo",system-ui,"Segoe UI",Tahoma,Arial;direction:rtl;color:var(--dark)}.wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}.card{width:min(680px,96vw);background:rgba(255,255,255,.97);border-radius:34px;padding:34px;box-shadow:0 26px 70px rgba(6,60,45,.22);border:1px solid #dce8e2}.logo{width:94px;height:94px;border-radius:30px;background:linear-gradient(135deg,#10b981,#047857);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;color:white;font-size:44px;font-weight:900;box-shadow:0 15px 30px rgba(16,185,129,.25)}.title{text-align:center;font-size:40px;margin:0;font-weight:900}.sub{text-align:center;color:#60756d;font-size:18px;margin:10px 0 24px}.roles{display:grid;grid-template-columns:1fr 1fr;gap:14px}.role-btn{height:64px;border:1px solid var(--line);border-radius:22px;background:white;font-size:24px;font-weight:900}.role-btn.active{background:linear-gradient(135deg,#10b981,#047857);color:#fff;box-shadow:0 16px 28px rgba(16,185,129,.25)}label{display:block;font-weight:900;margin:16px 0 8px}input{width:100%;height:58px;border:1px solid var(--line);background:#fbfefd;border-radius:18px;padding:0 18px;font-size:18px;font-family:inherit}.btn{width:100%;height:64px;border:0;border-radius:22px;background:linear-gradient(135deg,#10b981,#047857);color:#fff;font-size:24px;font-weight:900;margin-top:20px}.note{background:#f4fbf7;border-radius:18px;padding:16px;margin-top:18px;color:#60756d;line-height:1.8;border:1px solid #dce8e2}.toast{position:fixed;left:18px;bottom:18px;background:#062a20;color:#fff;padding:14px 18px;border-radius:16px;display:none;font-weight:900}@media(max-width:600px){.card{padding:24px;border-radius:26px}.title{font-size:32px}.role-btn{font-size:21px}}
 
 .logo svg{display:block}.btn,.role-btn,input{transition:.18s ease}.btn:hover,.role-btn:hover{transform:translateY(-1px);box-shadow:0 12px 28px rgba(16,185,129,.18)}.toast{box-shadow:0 20px 55px rgba(6,42,32,.35);border:1px solid rgba(16,185,129,.35)}
@@ -111,7 +136,7 @@ async function login(){
   function installUI(){
     document.querySelectorAll('[data-store-name]').forEach(e=>{ if(window.DB&&DB.settings&&DB.settings.storeName)e.textContent=DB.settings.storeName; });
     const actions=document.querySelector('.top-actions')||document.querySelector('.topbar');
-    if(actions && !document.getElementById('logoutTopBtn')){ const b=document.createElement('button'); b.id='logoutTopBtn'; b.type='button'; b.className='icon-btn logout-btn'; b.title='تسجيل الخروج'; b.innerHTML=svg.logout; b.onclick=function(){localStorage.removeItem('currentUser'); location.href='index.html'}; actions.appendChild(b); }
+    if(actions && !document.getElementById('logoutTopBtn')){ const b=document.createElement('button'); b.id='logoutTopBtn'; b.type='button'; b.className='icon-btn logout-btn'; b.title='تسجيل الخروج'; b.innerHTML=svg.logout; b.onclick=function(){ if(window.oskarLogout) oskarLogout(); else {localStorage.removeItem('currentUser'); localStorage.removeItem('oskar_saved_login_session'); location.href='index.html'} }; actions.appendChild(b); }
     const syncBtn=[...document.querySelectorAll('button,.icon-btn')].find(x=>/syncNow|مزامنة|↻/i.test(x.getAttribute('onclick')||x.textContent||''));
     if(syncBtn && !syncBtn.dataset.fixedIcon){syncBtn.dataset.fixedIcon='1'; syncBtn.innerHTML=svg.sync; syncBtn.title='مزامنة';}
     const bottom=document.querySelector('.bottom-nav');
@@ -139,7 +164,186 @@ async function login(){
   window.toggleCartonProductFields=function(){ const is=$('prodUnit')&&$('prodUnit').value==='كرتونة'; if($('cartonProductBox'))$('cartonProductBox').classList.toggle('hide',!is); if($('unitProductBox'))$('unitProductBox').classList.toggle('hide',is); calcProductUnitPrices(); };
   window.calcProductUnitPrices=function(){ const size=safe($('cartonSize')&&$('cartonSize').value)||1; if($('unitPurchasePrice'))$('unitPurchasePrice').value=(safe($('cartonPurchasePrice')&&$('cartonPurchasePrice').value)/size).toFixed(3); if($('unitSalePrice'))$('unitSalePrice').value=(safe($('cartonSalePrice')&&$('cartonSalePrice').value)/size).toFixed(3); };
   window.saveProductFinal=function(){ const f=$('productFinalForm'); if(!f)return; const d=Object.fromEntries(new FormData(f).entries()); d.id=(window.uid?uid('prd'):'prd-'+Date.now()); d.createdAt=(window.nowText?nowText():new Date().toLocaleString()); d.createdBy=(cur().name||'مدير'); d.stock=safe(d.stock); if(d.unit==='كرتونة'){d.cartonSize=safe(d.cartonSize)||1;d.unitsPerCarton=d.cartonSize;d.cartonPurchasePrice=safe(d.cartonPurchasePrice);d.cartonSalePrice=safe(d.cartonSalePrice);d.unitPurchasePrice=safe(d.unitPurchasePrice);d.unitSalePrice=safe(d.unitSalePrice);d.purchasePrice=d.unitPurchasePrice;d.salePrice=d.unitSalePrice}else{d.purchasePrice=safe(d.purchasePrice);d.salePrice=safe(d.salePrice);d.unitPurchasePrice=d.purchasePrice;d.unitSalePrice=d.salePrice} arr('products').unshift(d); if(window.logAction)logAction('إضافة','صنف',d.name); persist2(); toast2('تم حفظ الصنف'); f.reset(); toggleCartonProductFields(); };
-  function printInvoice2(rec){ if(!rec)return; const rows=(rec.items||[]).map(i=>'<tr><td>'+i.name+'</td><td>'+i.qty+' '+(i.unit||'')+'</td><td>'+mon(i.unitPrice)+'</td><td>'+mon(i.total)+'</td></tr>').join(''); const html='<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>فاتورة</title><style>body{font-family:Cairo,Arial;margin:0;background:#fff;color:#111}.receipt{width:80mm;margin:auto;padding:8px}.head{text-align:center;border-bottom:1px dashed #111;padding-bottom:8px}.store{font-size:22px;font-weight:900}.meta{font-size:12px;line-height:1.8}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border-bottom:1px dashed #aaa;padding:5px 2px;text-align:right}.total{font-size:18px;font-weight:900;border-top:2px solid #111;margin-top:8px;padding-top:8px}.thanks{text-align:center;margin-top:12px;font-size:12px}@media print{button{display:none}.receipt{width:80mm}}</style></head><body><div class="receipt"><div class="head"><div class="store">'+((window.DB&&DB.settings&&DB.settings.storeName)||'كاشير أوسكار')+'</div><div class="meta">فاتورة رقم: '+(rec.invoiceNo||rec.id||'')+'<br>التاريخ: '+(rec.date||'')+'<br>العميل: '+(rec.customerName||'زبون نقدي')+'</div></div><table><thead><tr><th>الصنف</th><th>كمية</th><th>سعر</th><th>مجموع</th></tr></thead><tbody>'+rows+'</tbody></table><div class="total">الإجمالي: '+mon(rec.total)+'</div><div class="meta">المدفوع: '+mon(rec.paid)+'<br>المستحق: '+mon(rec.due)+'</div><div class="thanks">شكراً لتسوقكم</div><button onclick="print()">طباعة / PDF</button></div></body></html>'; const w=window.open('','_blank'); if(w){w.document.write(html);w.document.close();setTimeout(()=>w.print(),350);} }
+  function printInvoice2(rec){ if(!rec)return; const rows=(rec.items||[]).map(i=>'<tr><td>'+i.name+'</td><td>'+i.qty+' '+(i.unit||'')+'</td><td>'+mon(i.unitPrice)+'</td><td>'+mon(i.total)+'</td></tr>').join(''); const html='<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>فاتورة</title><style>body{font-family:Cairo,Arial;margin:0;background:#fff;color:#111}.receipt{width:80mm;margin:auto;padding:8px}.head{text-align:center;border-bottom:1px dashed #111;padding-bottom:8px}.store{font-size:22px;font-weight:900}.meta{font-size:12px;line-height:1.8}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border-bottom:1px dashed #aaa;padding:5px 2px;text-align:right}.total{font-size:18px;font-weight:900;border-top:2px solid #111;margin-top:8px;padding-top:8px}.thanks{text-align:center;margin-top:12px;font-size:12px}@media print{button{display:none}.receipt{width:80mm}}</style></head><body><div class="receipt"><div class="head"><div class="store">'+((window.DB&&DB.settings&&DB.settings.storeName)||'كاشير أوسكار')+'</div><div class="meta">فاتورة رقم: '+(rec.invoiceNo||rec.id||'')+'<br>التاريخ: '+(rec.date||'')+'<br>العميل: '+(rec.customerName||'زبون نقدي')+'</div></div><table><thead><tr><th>الصنف</th><th>كمية</th><th>سعر</th><th>مجموع</th></tr></thead><tbody>'+rows+'</tbody></table><div class="total">الإجمالي: '+mon(rec.total)+'</div><div class="meta">المدفوع: '+mon(rec.paid)+'<br>المستحق: '+mon(rec.due)+'</div><div class="thanks">شكراً لتسوقكم</div><button onclick="print()">طباعة / PDF</button></div><script id="oskar-branch-product-save-fix-v2">
+(function(){
+  if(window.__OSKAR_BRANCH_PRODUCT_SAVE_FIX_V2__) return;
+  window.__OSKAR_BRANCH_PRODUCT_SAVE_FIX_V2__ = true;
+  const APP_KEY='supermarket_pos_ar_v1';
+  const pageName=decodeURIComponent((location.pathname.split('/').pop()||''));
+  const $=id=>document.getElementById(id);
+  const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  function cfg(){try{return (typeof CFG!=='undefined'&&CFG)||window.PAGE_CONFIG||{}}catch(e){return window.PAGE_CONFIG||{}}}
+  function getDB(){
+    try{ if(typeof DB!=='undefined' && DB) return DB; }catch(e){}
+    try{ return JSON.parse(localStorage.getItem(APP_KEY)||'{}')||{}; }catch(e){ return {}; }
+  }
+  function setDBHard(d){
+    d=d||{};
+    try{ DB=d; }catch(e){}
+    try{ window.DB=d; }catch(e){}
+    try{ localStorage.setItem(APP_KEY,JSON.stringify(d)); }catch(e){}
+    try{ if(typeof saveDB==='function') saveDB(d); }catch(e){}
+    try{ if(typeof updateSyncState==='function') updateSyncState(); }catch(e){}
+  }
+  function arr(name){const d=getDB(); if(!Array.isArray(d[name])) d[name]=[]; return d[name];}
+  function uid(prefix){try{return typeof window.uid==='function'?window.uid(prefix):(prefix+'-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7));}catch(e){return prefix+'-'+Date.now();}}
+  function nowISO(){return new Date().toISOString();}
+  function nowTextSafe(){try{return typeof nowText==='function'?nowText():new Date().toLocaleString('ar-EG',{hour12:false});}catch(e){return new Date().toLocaleString('ar-EG',{hour12:false});}}
+  function num(v){const n=Number(String(v??'').replace(/,/g,'')); return Number.isFinite(n)?n:0;}
+  function toastSafe(msg){try{if(typeof toast==='function') return toast(msg);}catch(e){} try{alert(msg);}catch(e){}}
+  function userName(){try{const u=JSON.parse(localStorage.getItem('currentUser')||'{}'); return u.name||u.username||'مدير النظام';}catch(e){return 'مدير النظام';}}
+  function activeRows(rows){return (rows||[]).filter(x=>x && x._deleted!==true && !x.deletedAt);}
+  function currentBranch(){
+    const d=getDB(), branches=activeRows(d.branches||[]);
+    if(!branches.length) return {id:'branch-main',name:'كاشير أوسكار',active:'نشط'};
+    const s=d.settings||{};
+    const wanted=localStorage.getItem('oskar_current_branch_id')||s.currentBranchId||s.currentBranch||branches[0].id;
+    return branches.find(b=>b.id===wanted||b.name===wanted)||branches[0];
+  }
+  function schedulePush(){
+    clearTimeout(window.__oskarHardSavePushTimer);
+    window.__oskarHardSavePushTimer=setTimeout(()=>{
+      try{ if(navigator.onLine && window.FirebaseBridge && typeof FirebaseBridge.pushWithKey==='function') FirebaseBridge.pushWithKey((getDB().settings||{}).companyKey).catch(console.warn); }catch(e){}
+    },550);
+  }
+  function addLog(action,title,note){
+    const d=getDB(); if(!Array.isArray(d.activityLog)) d.activityLog=[];
+    d.activityLog.unshift({id:uid('act'),date:nowTextSafe(),action,subjectType:title||'',by:userName(),note:note||''});
+  }
+  function saveLocalAndRefresh(msg){
+    const d=getDB(); d.lastLocalUpdate=nowISO(); setDBHard(d); schedulePush();
+    try{ if(typeof closeModal==='function') closeModal(); }catch(e){}
+    try{ if(typeof renderPage==='function') renderPage(); }catch(e){}
+    setTimeout(()=>{try{ if(typeof buildBranchPanel==='function') buildBranchPanel(); }catch(e){}},80);
+    toastSafe(msg||'تم الحفظ');
+  }
+  function branchFromValue(value){
+    const branches=activeRows(arr('branches'));
+    return branches.find(b=>String(b.id)===String(value)||String(b.name)===String(value))||currentBranch();
+  }
+  function normalizeBranch(data,oldRec,isNew){
+    data.name=String(data.name||oldRec?.name||'').trim();
+    data.code=String(data.code||oldRec?.code||'').trim();
+    data.address=String(data.address||oldRec?.address||'').trim();
+    data.logo=String(data.logo||oldRec?.logo||'').trim();
+    data.active=data.active||oldRec?.active||'نشط';
+    data._updatedAt=nowISO(); data.updatedAt=nowTextSafe();
+    if(isNew){data.createdAt=data.createdAt||nowTextSafe(); data.createdBy=data.createdBy||userName();}
+    return data;
+  }
+  function normalizeProduct(data,oldRec,isNew,source){
+    oldRec=oldRec||{};
+    const nFields=['stock','stockUnits','purchasePrice','salePrice','cartonPrice','cartonSize','unitsPerCarton','cartonWholesalePrice','cartonSalePrice','cartonPurchasePrice','unitSaleFromCarton','unitSalePrice','unitPurchasePrice','alertQty'];
+    nFields.forEach(k=>{ if(Object.prototype.hasOwnProperty.call(data,k) && data[k]!=='' && data[k]!==undefined) data[k]=num(data[k]); });
+    const b=branchFromValue(data.branchId||data.branch||oldRec.branchId||oldRec.branch||'');
+    if(b){data.branchId=b.id; data.branch=b.name;}
+    const cs=num(data.cartonSize||data.unitsPerCarton||oldRec.cartonSize||oldRec.unitsPerCarton||0);
+    if(cs>0){data.cartonSize=cs; data.unitsPerCarton=cs;}
+    if(data.unitSaleFromCarton!==undefined && num(data.unitSaleFromCarton)>0) data.unitSalePrice=num(data.unitSaleFromCarton);
+    if(data.unitSalePrice===undefined) data.unitSalePrice=num(data.salePrice!==undefined?data.salePrice:(oldRec.unitSalePrice||oldRec.salePrice||0));
+    if(data.unitPurchasePrice===undefined) data.unitPurchasePrice=num(data.purchasePrice!==undefined?data.purchasePrice:(oldRec.unitPurchasePrice||oldRec.purchasePrice||0));
+    if((data.cartonSalePrice===undefined || num(data.cartonSalePrice)===0) && cs>0 && num(data.unitSalePrice)>0) data.cartonSalePrice=num(data.unitSalePrice)*cs;
+    if((data.cartonPurchasePrice===undefined || num(data.cartonPurchasePrice)===0) && cs>0 && num(data.unitPurchasePrice)>0) data.cartonPurchasePrice=num(data.unitPurchasePrice)*cs;
+    if(data.salePrice===undefined || data.salePrice==='') data.salePrice=num(data.unitSalePrice||oldRec.salePrice||0);
+    if(data.purchasePrice===undefined || data.purchasePrice==='') data.purchasePrice=num(data.unitPurchasePrice||oldRec.purchasePrice||0);
+    const hasStock=Object.prototype.hasOwnProperty.call(data,'stock');
+    const unitTxt=String(data.inputUnit||data.unit||oldRec.inputUnit||oldRec.unit||'');
+    let stockUnits=oldRec.stockUnits!==undefined?num(oldRec.stockUnits):num(oldRec.stock);
+    if(hasStock){
+      const fromAddPage = isNew && (/إضافة-صنف/.test(pageName) || source==='advanced');
+      stockUnits = (fromAddPage && /كرتون/.test(unitTxt) && cs>0) ? num(data.stock)*cs : num(data.stock);
+    }
+    data.stockUnits=stockUnits; data.stock=stockUnits; data.__unitStockNormalized=true;
+    data._updatedAt=nowISO(); data.updatedAt=nowTextSafe();
+    if(isNew){data.createdAt=data.createdAt||nowTextSafe(); data.createdBy=data.createdBy||userName();}
+    return data;
+  }
+  function hardSaveRecord(collectionName,raw,source){
+    const d=getDB(); if(!Array.isArray(d[collectionName])) d[collectionName]=[];
+    const rows=d[collectionName];
+    raw=raw||{}; raw.id=String(raw.id||'').trim();
+    let idx=raw.id?rows.findIndex(x=>x&&x.id===raw.id):-1;
+    const isNew=idx<0;
+    if(isNew) raw.id=raw.id||uid(collectionName==='branches'?'branch':collectionName==='products'?'prd':'row');
+    const oldRec=isNew?{}:(rows[idx]||{});
+    let rec={...oldRec,...raw};
+    if(collectionName==='branches') rec=normalizeBranch(rec,oldRec,isNew);
+    if(collectionName==='products') rec=normalizeProduct(rec,oldRec,isNew,source);
+    if(isNew) rows.unshift(rec); else rows[idx]=rec;
+    if(collectionName==='branches'){
+      d.settings=d.settings||{};
+      const currentId=localStorage.getItem('oskar_current_branch_id')||d.settings.currentBranchId||d.settings.currentBranch;
+      if(isNew && activeRows(rows).length===1){d.settings.currentBranchId=rec.id; d.settings.currentBranch=rec.name; localStorage.setItem('oskar_current_branch_id',rec.id);}
+      if(!isNew && (currentId===rec.id || currentId===oldRec.name)){d.settings.currentBranchId=rec.id; d.settings.currentBranch=rec.name; localStorage.setItem('oskar_current_branch_id',rec.id);}
+    }
+    addLog(isNew?'إضافة':'تعديل', cfg().title||collectionName, rec.name||rec.id);
+    setDBHard(d);
+    return {rec,isNew};
+  }
+  function dynamicOptions(source){return activeRows(arr(source));}
+  function inputForField(f,rec){
+    const val = rec?.[f.name] ?? '';
+    if(f.type==='textarea') return '<textarea name="'+esc(f.name)+'" '+(f.required?'required':'')+'>'+esc(val)+'</textarea>';
+    if(f.type==='select'){
+      let options=[];
+      if(f.dynamic){
+        const valueKey=f.dynamic.value||'id', labelKey=f.dynamic.label||'name';
+        const selected=String(val||rec?.[f.name+'Id']||'');
+        options.push('<option value="">'+esc(f.dynamic.empty||'يرجى الاختيار')+'</option>');
+        dynamicOptions(f.dynamic.source).forEach(x=>{
+          const ov=x[valueKey]??x.id, lab=x[labelKey]??x.name??x.id;
+          const hit=String(ov)===selected || String(x.id)===selected || String(x.name)===selected;
+          options.push('<option value="'+esc(ov)+'" '+(hit?'selected':'')+'>'+esc(lab)+'</option>');
+        });
+      }else{
+        (f.options||[]).forEach(o=>options.push('<option value="'+esc(o)+'" '+(String(o)===String(val)?'selected':'')+'>'+esc(o)+'</option>'));
+      }
+      return '<select name="'+esc(f.name)+'" '+(f.required?'required':'')+'>'+options.join('')+'</select>';
+    }
+    return '<input name="'+esc(f.name)+'" type="'+esc(f.type||'text')+'" '+(f.required?'required':'')+' value="'+esc(val)+'">';
+  }
+  const oldOpenForm=window.openForm;
+  window.openForm=function(editId=null){
+    const c=cfg().collection||'';
+    if(c==='branches'||c==='products'){
+      const fields=cfg().fields||[];
+      const rec=editId?activeRows(arr(c)).find(x=>x.id===editId)||{}:{};
+      const body=$('modalBody'), back=$('modalBack'), title=$('modalTitle');
+      if(!body||!back) return oldOpenForm&&oldOpenForm.apply(this,arguments);
+      body.innerHTML='<form id="crudForm" class="grid">'+fields.map(f=>'<div class="field"><label>'+esc(f.label||f.name)+(f.required?' *':'')+'</label>'+inputForField(f,rec)+'</div>').join('')+'<div class="field" style="grid-column:1/-1"><label>ملاحظة</label><textarea name="note">'+esc(rec.note||'')+'</textarea></div><input type="hidden" name="id" value="'+esc(editId||'')+'"></form>';
+      if(title) title.textContent=editId?'تعديل':'إضافة';
+      back.style.display='flex';
+      return;
+    }
+    return oldOpenForm&&oldOpenForm.apply(this,arguments);
+  };
+  const oldSaveCrud=window.saveCrud;
+  window.saveCrud=function(){
+    const c=cfg().collection||'';
+    if(c==='branches'||c==='products'){
+      const form=$('crudForm'); if(!form) return;
+      if(form.reportValidity && !form.reportValidity()) return;
+      const data=Object.fromEntries(new FormData(form).entries());
+      const res=hardSaveRecord(c,data,'crud');
+      saveLocalAndRefresh(c==='branches'?(res.isNew?'تم حفظ الفرع':'تم تعديل الفرع'):(res.isNew?'تم حفظ الصنف':'تم تعديل الصنف'));
+      return;
+    }
+    return oldSaveCrud&&oldSaveCrud.apply(this,arguments);
+  };
+  const oldSaveProductAdvanced=window.saveProductAdvanced;
+  window.saveProductAdvanced=function(){
+    const form=$('crudForm');
+    if(!form) return oldSaveProductAdvanced&&oldSaveProductAdvanced.apply(this,arguments);
+    if(form.reportValidity && !form.reportValidity()) return;
+    const data=Object.fromEntries(new FormData(form).entries());
+    hardSaveRecord('products',data,'advanced');
+    try{form.reset();}catch(e){}
+    saveLocalAndRefresh('تم حفظ الصنف وتثبيت المخزون بالوحدات');
+  };
+})();
+</script>
+
+</body></html>'; const w=window.open('','_blank'); if(w){w.document.write(html);w.document.close();setTimeout(()=>w.print(),350);} }
   window.printInvoice=printInvoice2;
   const oldRenderPage=window.renderPage; window.renderPage=function(){ installUI(); const fname=window.CFG&&CFG.filename; const coll=window.CFG&&CFG.collection; if(fname==='العملاء.html'||coll==='customers') return renderCustomersFinal(); if(fname==='تقرير-الأرباح.html') return renderProfitFinal(); if(fname==='إضافة-صنف.html') return renderProductForm(); return oldRenderPage?oldRenderPage():null; };
   document.addEventListener('DOMContentLoaded',function(){ installUI(); setTimeout(()=>{if(window.renderPage)try{renderPage()}catch(e){console.error(e);}},50); }); if(document.readyState!=='loading') setTimeout(()=>{installUI(); if(window.renderPage)try{renderPage()}catch(e){console.error(e);}},30);
@@ -211,6 +415,185 @@ async function login(){
   if(document.readyState!=='loading')setTimeout(()=>{buildBranchPanel();injectBackupCard();fixCustomerKpi();purgeDeletedLocal();},180);
 })();
 
+</script>
+
+<script id="oskar-branch-product-save-fix-v2">
+(function(){
+  if(window.__OSKAR_BRANCH_PRODUCT_SAVE_FIX_V2__) return;
+  window.__OSKAR_BRANCH_PRODUCT_SAVE_FIX_V2__ = true;
+  const APP_KEY='supermarket_pos_ar_v1';
+  const pageName=decodeURIComponent((location.pathname.split('/').pop()||''));
+  const $=id=>document.getElementById(id);
+  const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  function cfg(){try{return (typeof CFG!=='undefined'&&CFG)||window.PAGE_CONFIG||{}}catch(e){return window.PAGE_CONFIG||{}}}
+  function getDB(){
+    try{ if(typeof DB!=='undefined' && DB) return DB; }catch(e){}
+    try{ return JSON.parse(localStorage.getItem(APP_KEY)||'{}')||{}; }catch(e){ return {}; }
+  }
+  function setDBHard(d){
+    d=d||{};
+    try{ DB=d; }catch(e){}
+    try{ window.DB=d; }catch(e){}
+    try{ localStorage.setItem(APP_KEY,JSON.stringify(d)); }catch(e){}
+    try{ if(typeof saveDB==='function') saveDB(d); }catch(e){}
+    try{ if(typeof updateSyncState==='function') updateSyncState(); }catch(e){}
+  }
+  function arr(name){const d=getDB(); if(!Array.isArray(d[name])) d[name]=[]; return d[name];}
+  function uid(prefix){try{return typeof window.uid==='function'?window.uid(prefix):(prefix+'-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7));}catch(e){return prefix+'-'+Date.now();}}
+  function nowISO(){return new Date().toISOString();}
+  function nowTextSafe(){try{return typeof nowText==='function'?nowText():new Date().toLocaleString('ar-EG',{hour12:false});}catch(e){return new Date().toLocaleString('ar-EG',{hour12:false});}}
+  function num(v){const n=Number(String(v??'').replace(/,/g,'')); return Number.isFinite(n)?n:0;}
+  function toastSafe(msg){try{if(typeof toast==='function') return toast(msg);}catch(e){} try{alert(msg);}catch(e){}}
+  function userName(){try{const u=JSON.parse(localStorage.getItem('currentUser')||'{}'); return u.name||u.username||'مدير النظام';}catch(e){return 'مدير النظام';}}
+  function activeRows(rows){return (rows||[]).filter(x=>x && x._deleted!==true && !x.deletedAt);}
+  function currentBranch(){
+    const d=getDB(), branches=activeRows(d.branches||[]);
+    if(!branches.length) return {id:'branch-main',name:'كاشير أوسكار',active:'نشط'};
+    const s=d.settings||{};
+    const wanted=localStorage.getItem('oskar_current_branch_id')||s.currentBranchId||s.currentBranch||branches[0].id;
+    return branches.find(b=>b.id===wanted||b.name===wanted)||branches[0];
+  }
+  function schedulePush(){
+    clearTimeout(window.__oskarHardSavePushTimer);
+    window.__oskarHardSavePushTimer=setTimeout(()=>{
+      try{ if(navigator.onLine && window.FirebaseBridge && typeof FirebaseBridge.pushWithKey==='function') FirebaseBridge.pushWithKey((getDB().settings||{}).companyKey).catch(console.warn); }catch(e){}
+    },550);
+  }
+  function addLog(action,title,note){
+    const d=getDB(); if(!Array.isArray(d.activityLog)) d.activityLog=[];
+    d.activityLog.unshift({id:uid('act'),date:nowTextSafe(),action,subjectType:title||'',by:userName(),note:note||''});
+  }
+  function saveLocalAndRefresh(msg){
+    const d=getDB(); d.lastLocalUpdate=nowISO(); setDBHard(d); schedulePush();
+    try{ if(typeof closeModal==='function') closeModal(); }catch(e){}
+    try{ if(typeof renderPage==='function') renderPage(); }catch(e){}
+    setTimeout(()=>{try{ if(typeof buildBranchPanel==='function') buildBranchPanel(); }catch(e){}},80);
+    toastSafe(msg||'تم الحفظ');
+  }
+  function branchFromValue(value){
+    const branches=activeRows(arr('branches'));
+    return branches.find(b=>String(b.id)===String(value)||String(b.name)===String(value))||currentBranch();
+  }
+  function normalizeBranch(data,oldRec,isNew){
+    data.name=String(data.name||oldRec?.name||'').trim();
+    data.code=String(data.code||oldRec?.code||'').trim();
+    data.address=String(data.address||oldRec?.address||'').trim();
+    data.logo=String(data.logo||oldRec?.logo||'').trim();
+    data.active=data.active||oldRec?.active||'نشط';
+    data._updatedAt=nowISO(); data.updatedAt=nowTextSafe();
+    if(isNew){data.createdAt=data.createdAt||nowTextSafe(); data.createdBy=data.createdBy||userName();}
+    return data;
+  }
+  function normalizeProduct(data,oldRec,isNew,source){
+    oldRec=oldRec||{};
+    const nFields=['stock','stockUnits','purchasePrice','salePrice','cartonPrice','cartonSize','unitsPerCarton','cartonWholesalePrice','cartonSalePrice','cartonPurchasePrice','unitSaleFromCarton','unitSalePrice','unitPurchasePrice','alertQty'];
+    nFields.forEach(k=>{ if(Object.prototype.hasOwnProperty.call(data,k) && data[k]!=='' && data[k]!==undefined) data[k]=num(data[k]); });
+    const b=branchFromValue(data.branchId||data.branch||oldRec.branchId||oldRec.branch||'');
+    if(b){data.branchId=b.id; data.branch=b.name;}
+    const cs=num(data.cartonSize||data.unitsPerCarton||oldRec.cartonSize||oldRec.unitsPerCarton||0);
+    if(cs>0){data.cartonSize=cs; data.unitsPerCarton=cs;}
+    if(data.unitSaleFromCarton!==undefined && num(data.unitSaleFromCarton)>0) data.unitSalePrice=num(data.unitSaleFromCarton);
+    if(data.unitSalePrice===undefined) data.unitSalePrice=num(data.salePrice!==undefined?data.salePrice:(oldRec.unitSalePrice||oldRec.salePrice||0));
+    if(data.unitPurchasePrice===undefined) data.unitPurchasePrice=num(data.purchasePrice!==undefined?data.purchasePrice:(oldRec.unitPurchasePrice||oldRec.purchasePrice||0));
+    if((data.cartonSalePrice===undefined || num(data.cartonSalePrice)===0) && cs>0 && num(data.unitSalePrice)>0) data.cartonSalePrice=num(data.unitSalePrice)*cs;
+    if((data.cartonPurchasePrice===undefined || num(data.cartonPurchasePrice)===0) && cs>0 && num(data.unitPurchasePrice)>0) data.cartonPurchasePrice=num(data.unitPurchasePrice)*cs;
+    if(data.salePrice===undefined || data.salePrice==='') data.salePrice=num(data.unitSalePrice||oldRec.salePrice||0);
+    if(data.purchasePrice===undefined || data.purchasePrice==='') data.purchasePrice=num(data.unitPurchasePrice||oldRec.purchasePrice||0);
+    const hasStock=Object.prototype.hasOwnProperty.call(data,'stock');
+    const unitTxt=String(data.inputUnit||data.unit||oldRec.inputUnit||oldRec.unit||'');
+    let stockUnits=oldRec.stockUnits!==undefined?num(oldRec.stockUnits):num(oldRec.stock);
+    if(hasStock){
+      const fromAddPage = isNew && (/إضافة-صنف/.test(pageName) || source==='advanced');
+      stockUnits = (fromAddPage && /كرتون/.test(unitTxt) && cs>0) ? num(data.stock)*cs : num(data.stock);
+    }
+    data.stockUnits=stockUnits; data.stock=stockUnits; data.__unitStockNormalized=true;
+    data._updatedAt=nowISO(); data.updatedAt=nowTextSafe();
+    if(isNew){data.createdAt=data.createdAt||nowTextSafe(); data.createdBy=data.createdBy||userName();}
+    return data;
+  }
+  function hardSaveRecord(collectionName,raw,source){
+    const d=getDB(); if(!Array.isArray(d[collectionName])) d[collectionName]=[];
+    const rows=d[collectionName];
+    raw=raw||{}; raw.id=String(raw.id||'').trim();
+    let idx=raw.id?rows.findIndex(x=>x&&x.id===raw.id):-1;
+    const isNew=idx<0;
+    if(isNew) raw.id=raw.id||uid(collectionName==='branches'?'branch':collectionName==='products'?'prd':'row');
+    const oldRec=isNew?{}:(rows[idx]||{});
+    let rec={...oldRec,...raw};
+    if(collectionName==='branches') rec=normalizeBranch(rec,oldRec,isNew);
+    if(collectionName==='products') rec=normalizeProduct(rec,oldRec,isNew,source);
+    if(isNew) rows.unshift(rec); else rows[idx]=rec;
+    if(collectionName==='branches'){
+      d.settings=d.settings||{};
+      const currentId=localStorage.getItem('oskar_current_branch_id')||d.settings.currentBranchId||d.settings.currentBranch;
+      if(isNew && activeRows(rows).length===1){d.settings.currentBranchId=rec.id; d.settings.currentBranch=rec.name; localStorage.setItem('oskar_current_branch_id',rec.id);}
+      if(!isNew && (currentId===rec.id || currentId===oldRec.name)){d.settings.currentBranchId=rec.id; d.settings.currentBranch=rec.name; localStorage.setItem('oskar_current_branch_id',rec.id);}
+    }
+    addLog(isNew?'إضافة':'تعديل', cfg().title||collectionName, rec.name||rec.id);
+    setDBHard(d);
+    return {rec,isNew};
+  }
+  function dynamicOptions(source){return activeRows(arr(source));}
+  function inputForField(f,rec){
+    const val = rec?.[f.name] ?? '';
+    if(f.type==='textarea') return '<textarea name="'+esc(f.name)+'" '+(f.required?'required':'')+'>'+esc(val)+'</textarea>';
+    if(f.type==='select'){
+      let options=[];
+      if(f.dynamic){
+        const valueKey=f.dynamic.value||'id', labelKey=f.dynamic.label||'name';
+        const selected=String(val||rec?.[f.name+'Id']||'');
+        options.push('<option value="">'+esc(f.dynamic.empty||'يرجى الاختيار')+'</option>');
+        dynamicOptions(f.dynamic.source).forEach(x=>{
+          const ov=x[valueKey]??x.id, lab=x[labelKey]??x.name??x.id;
+          const hit=String(ov)===selected || String(x.id)===selected || String(x.name)===selected;
+          options.push('<option value="'+esc(ov)+'" '+(hit?'selected':'')+'>'+esc(lab)+'</option>');
+        });
+      }else{
+        (f.options||[]).forEach(o=>options.push('<option value="'+esc(o)+'" '+(String(o)===String(val)?'selected':'')+'>'+esc(o)+'</option>'));
+      }
+      return '<select name="'+esc(f.name)+'" '+(f.required?'required':'')+'>'+options.join('')+'</select>';
+    }
+    return '<input name="'+esc(f.name)+'" type="'+esc(f.type||'text')+'" '+(f.required?'required':'')+' value="'+esc(val)+'">';
+  }
+  const oldOpenForm=window.openForm;
+  window.openForm=function(editId=null){
+    const c=cfg().collection||'';
+    if(c==='branches'||c==='products'){
+      const fields=cfg().fields||[];
+      const rec=editId?activeRows(arr(c)).find(x=>x.id===editId)||{}:{};
+      const body=$('modalBody'), back=$('modalBack'), title=$('modalTitle');
+      if(!body||!back) return oldOpenForm&&oldOpenForm.apply(this,arguments);
+      body.innerHTML='<form id="crudForm" class="grid">'+fields.map(f=>'<div class="field"><label>'+esc(f.label||f.name)+(f.required?' *':'')+'</label>'+inputForField(f,rec)+'</div>').join('')+'<div class="field" style="grid-column:1/-1"><label>ملاحظة</label><textarea name="note">'+esc(rec.note||'')+'</textarea></div><input type="hidden" name="id" value="'+esc(editId||'')+'"></form>';
+      if(title) title.textContent=editId?'تعديل':'إضافة';
+      back.style.display='flex';
+      return;
+    }
+    return oldOpenForm&&oldOpenForm.apply(this,arguments);
+  };
+  const oldSaveCrud=window.saveCrud;
+  window.saveCrud=function(){
+    const c=cfg().collection||'';
+    if(c==='branches'||c==='products'){
+      const form=$('crudForm'); if(!form) return;
+      if(form.reportValidity && !form.reportValidity()) return;
+      const data=Object.fromEntries(new FormData(form).entries());
+      const res=hardSaveRecord(c,data,'crud');
+      saveLocalAndRefresh(c==='branches'?(res.isNew?'تم حفظ الفرع':'تم تعديل الفرع'):(res.isNew?'تم حفظ الصنف':'تم تعديل الصنف'));
+      return;
+    }
+    return oldSaveCrud&&oldSaveCrud.apply(this,arguments);
+  };
+  const oldSaveProductAdvanced=window.saveProductAdvanced;
+  window.saveProductAdvanced=function(){
+    const form=$('crudForm');
+    if(!form) return oldSaveProductAdvanced&&oldSaveProductAdvanced.apply(this,arguments);
+    if(form.reportValidity && !form.reportValidity()) return;
+    const data=Object.fromEntries(new FormData(form).entries());
+    hardSaveRecord('products',data,'advanced');
+    try{form.reset();}catch(e){}
+    saveLocalAndRefresh('تم حفظ الصنف وتثبيت المخزون بالوحدات');
+  };
+})();
 </script>
 
 </body></html>
