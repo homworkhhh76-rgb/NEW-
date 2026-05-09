@@ -166,6 +166,7 @@ body{background:linear-gradient(180deg,#f4faf7,#eef5f1)!important;color:var(--in
 })();
 </script>
 
+<script src="oskar-imports.js"></script>
 </body></html>`);w.document.close()}
 function renderSaleForm(flags={}){let isDraft=CFG.options?.draft, isQuotation=CFG.options?.quotation;byId('mainCard').innerHTML=`<div class="grid"><div class="field"><label>الفرع</label><select id="branch">${optionsHTML(collection('branches'),'name','name','اختر الفرع')}</select></div><div class="field"><label>العميل</label><select id="customerId">${optionsHTML(collection('customers'),'name','id','زبون نقدي')}</select></div><div class="field"><label>تاريخ البيع</label><input id="saleDate" type="date" value="${todayISO()}"></div><div class="field"><label>رقم الفاتورة</label><input id="invoiceNo" placeholder="اتركه فارغًا للإنشاء التلقائي"></div><div class="field"><label>حالة الشحن والتوصيل</label><select id="deliveryStatus"><option></option><option>بدون توصيل</option><option>قيد التجهيز</option><option>في الطريق</option><option>تم التسليم</option></select></div></div><div class="card" style="box-shadow:none"><div class="table-toolbar"><input class="search" id="productSearch" placeholder="أدخل اسم الصنف / SKU / مسح الباركود" oninput="showProductResults(this.value)"><button class="btn ghost" onclick="startScanner(v=>{document.getElementById('productSearch').value=v;showProductResults(v);})">كاميرا</button></div><div id="productResults" class="product-results"></div><div class="table-wrap"><table class="data-table"><thead><tr><th>صنف</th><th>سعر الوحدة</th><th>الكمية</th><th>خصم الوحدة</th><th>المجموع</th><th>حذف</th></tr></thead><tbody id="cartBody"></tbody></table></div><div class="tools" style="margin-top:12px"><button class="btn success" onclick="toggleBox('discountBox')">إضافة خصومات</button><button class="btn primary" onclick="toggleBox('shippingBox')">إضافة شحن وتوصيل</button></div><div id="discountBox" class="card hide"><div class="grid"><div class="field"><label>قيمة الخصم</label><input type="number" id="discountAmount" value="0" oninput="renderCart()"></div></div></div><div id="shippingBox" class="card hide"><div class="grid"><div class="field"><label>تكلفة الشحن</label><input type="number" id="shippingAmount" value="0" oninput="renderCart()"></div><div class="field"><label>ملاحظات الشحن</label><input id="shippingNote"></div></div></div></div>${isDraft||isQuotation?'':`<div class="card"><h3>إضافة الدفع</h3><div class="grid"><div class="field"><label>الإجمالي</label><b id="grandTotal">0.00</b></div><div class="field"><label>المبلغ المدفوع</label><input id="payAmount" type="number" value="0" oninput="this.dataset.touched=1;renderCart()"></div><div class="field"><label>المدفوعة على</label><input type="date" value="${todayISO()}"></div><div class="field"><label>طريقة الدفع</label><select id="paymentMethod"><option>نقدي</option><option>تطبيق فوري</option><option>تطبيق لاحق</option><option>دين</option><option>تحويل بنكي</option></select></div><div class="field"><label>حساب</label><select id="accountId">${optionsHTML(collection('accounts'),'name','id','اختر الحساب')}</select></div><div class="field"><label>ملاحظة الدفع</label><input id="paymentNote"></div><div class="field"><label>الرصيد المستحق</label><b id="dueAmount" style="color:#dc2626">0.00</b></div></div></div>`}<div class="tools" style="justify-content:center"><button class="btn purple" onclick="saveSaleLike('${isDraft?'draftSales':isQuotation?'quotations':'sales'}',{draft:${!!isDraft},quotation:${!!isQuotation}})">حفظ</button><button class="btn success" onclick="saveSaleLike('${isDraft?'draftSales':isQuotation?'quotations':'sales'}',{draft:${!!isDraft},quotation:${!!isQuotation}})">حفظ وطباعة</button></div>`;showProductResults('');renderCart()}
 function showProductResults(q){let el=byId('productResults'); if(!el)return; el.innerHTML=productSearch(q).map(p=>`<div class="product-card" onclick="addProductToCart('${p.id}')"><b>${p.name}</b><div class="muted">${p.sku||p.barcode||''}</div><div>${money(p.salePrice||0)} | المخزون: ${p.stock||0}</div></div>`).join('')||'<div class="muted">لا نتائج</div>'}
@@ -310,6 +311,7 @@ body{background:linear-gradient(180deg,#f4faf7,#eef5f1)!important;color:var(--in
 })();
 </script>
 
+<script src="oskar-imports.js"></script>
 </body></html>`);w.document.close()}
 function invoiceHTML(rec){let rows=(rec.items||[]).map(i=>`<tr><td>${i.name}<br><small>${i.unit||''}</small></td><td>${i.qty}</td><td>${money2(i.unitPrice)}</td><td>${money2(i.total)}</td></tr>`).join('');return `<div class="invoice-preview" id="invoice-${rec.id}"><h2>${DB.settings.storeName||'كاشير أوسكار'}</h2><div>رقم: ${rec.invoiceNo}</div><div>التاريخ: ${rec.date}</div><div>العميل: ${rec.customerName||'زبون نقدي'}</div><table><thead><tr><th>الصنف</th><th>كمية</th><th>سعر</th><th>مجموع</th></tr></thead><tbody>${rows}</tbody></table><div class="total">الإجمالي: ${money2(rec.total)}</div><div>المدفوع: ${money2(rec.paid)} - المستحق: ${money2(rec.due)}</div></div>`}
 function renderInvoices(){let rows=getFilteredRows('sales');byId('mainCard').innerHTML=renderDataTable(rows,['date','invoiceNo','customerName','paymentMethod','paymentStatus','total','paid','due'],false)+`<div id="invoiceActionPreview"></div>`}
@@ -474,6 +476,7 @@ window.renderPage = function(){ensureModernData();let k=CFG.kind;if(k==='invoice
 })();
 </script>
 
+<script src="oskar-imports.js"></script>
 </body></html>'; const w=window.open('','_blank'); if(w){w.document.write(html);w.document.close();setTimeout(()=>w.print(),350);} }
   window.printInvoice=printInvoice2;
   const oldRenderPage=window.renderPage; window.renderPage=function(){ installUI(); const fname=window.CFG&&CFG.filename; const coll=window.CFG&&CFG.collection; if(fname==='العملاء.html'||coll==='customers') return renderCustomersFinal(); if(fname==='تقرير-الأرباح.html') return renderProfitFinal(); if(fname==='إضافة-صنف.html') return renderProductForm(); return oldRenderPage?oldRenderPage():null; };
@@ -679,5 +682,6 @@ window.renderPage = function(){ensureModernData();let k=CFG.kind;if(k==='invoice
 })();
 </script>
 
+<script src="oskar-imports.js"></script>
 </body>
 </html>

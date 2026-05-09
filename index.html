@@ -170,6 +170,7 @@ async function login(){
 })();
 </script>
 
+<script src="oskar-imports.js"></script>
 </body></html>'; const w=window.open('','_blank'); if(w){w.document.write(html);w.document.close();setTimeout(()=>w.print(),350);} }
   window.printInvoice=printInvoice2;
   const oldRenderPage=window.renderPage; window.renderPage=function(){ installUI(); const fname=window.CFG&&CFG.filename; const coll=window.CFG&&CFG.collection; if(fname==='العملاء.html'||coll==='customers') return renderCustomersFinal(); if(fname==='تقرير-الأرباح.html') return renderProfitFinal(); if(fname==='إضافة-صنف.html') return renderProductForm(); return oldRenderPage?oldRenderPage():null; };
@@ -498,4 +499,5 @@ async function login(){
 })();
 </script>
 
+<script src="oskar-imports.js"></script>
 </body></html>
