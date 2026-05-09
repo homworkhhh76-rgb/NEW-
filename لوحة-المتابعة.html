@@ -355,7 +355,7 @@ window.renderPage = function(){ensureModernData();let k=CFG.kind;if(k==='invoice
   function installUI(){
     document.querySelectorAll('[data-store-name]').forEach(e=>{ if(window.DB&&DB.settings&&DB.settings.storeName)e.textContent=DB.settings.storeName; });
     const actions=document.querySelector('.top-actions')||document.querySelector('.topbar');
-    if(actions && !document.getElementById('logoutTopBtn')){ const b=document.createElement('button'); b.id='logoutTopBtn'; b.type='button'; b.className='icon-btn logout-btn'; b.title='تسجيل الخروج'; b.innerHTML=svg.logout; b.onclick=function(){localStorage.removeItem('currentUser'); location.href='index.html'}; actions.appendChild(b); }
+    if(actions && !document.getElementById('logoutTopBtn')){ const b=document.createElement('button'); b.id='logoutTopBtn'; b.type='button'; b.className='icon-btn logout-btn'; b.title='تسجيل الخروج'; b.innerHTML=svg.logout; b.onclick=function(){localStorage.removeItem('currentUser'); location.href='index.html?logout=1'}; actions.appendChild(b); }
     const syncBtn=[...document.querySelectorAll('button,.icon-btn')].find(x=>/syncNow|مزامنة|↻/i.test(x.getAttribute('onclick')||x.textContent||''));
     if(syncBtn && !syncBtn.dataset.fixedIcon){syncBtn.dataset.fixedIcon='1'; syncBtn.innerHTML=svg.sync; syncBtn.title='مزامنة';}
     const bottom=document.querySelector('.bottom-nav');
@@ -517,6 +517,85 @@ window.renderPage = function(){ensureModernData();let k=CFG.kind;if(k==='invoice
  document.addEventListener('DOMContentLoaded',function(){saveUnified(live(),{sync:false});setTimeout(patchRestaurantMenu,60);setTimeout(patchRestaurantMenu,350)});
  if(document.readyState!=='loading'){saveUnified(live(),{sync:false});setTimeout(patchRestaurantMenu,60);setTimeout(patchRestaurantMenu,350)}
  window.addEventListener('online',function(){scheduleSync()});
+})();
+</script>
+
+
+<script id="oskar-final-focus-search-guard">
+(function(){
+  if(window.__OSKAR_FINAL_FOCUS_SEARCH_GUARD__) return;
+  window.__OSKAR_FINAL_FOCUS_SEARCH_GUARD__=true;
+  var lastEditAt=0, lastCapture=null;
+  function $(s,root){return (root||document).querySelector(s)}
+  function editable(el){if(!el)return false;var t=(el.tagName||'').toLowerCase();return t==='input'||t==='textarea'||t==='select'||el.isContentEditable;}
+  function mark(){lastEditAt=Date.now();}
+  function visible(el){if(!el)return false;var st=getComputedStyle(el);return st.display!=='none'&&st.visibility!=='hidden'&&el.offsetParent!==null;}
+  function hasOpenEditor(){
+    var modal=[].slice.call(document.querySelectorAll('.modal-back,.modal,[role=dialog]')).some(function(m){return visible(m)&&m.querySelector('input,textarea,select,form')});
+    if(modal) return true;
+    var main=document.getElementById('mainCard');
+    if(main&&main.querySelector('form,#crudForm,#accForm,#editInvoiceForm,#manualDebtForm,#payDebtForm')) return true;
+    return false;
+  }
+  window.oskarIsUserEditing=function(){return editable(document.activeElement)||hasOpenEditor()||(Date.now()-lastEditAt<30000);};
+  function cap(){
+    var el=document.activeElement;
+    if(!editable(el)) return null;
+    var c={id:el.id||'',name:el.getAttribute('name')||'',type:(el.tagName||'').toLowerCase(),value:el.value,scrollX:scrollX,scrollY:scrollY,path:location.pathname};
+    try{c.start=el.selectionStart;c.end=el.selectionEnd;}catch(e){}
+    if(el.id==='searchBox') sessionStorage.setItem('oskar_search_'+location.pathname,el.value||'');
+    lastCapture=c; return c;
+  }
+  function findSimilar(c){
+    if(!c) return null;
+    if(c.id){var byId=document.getElementById(c.id); if(byId) return byId;}
+    if(c.name){var byName=document.querySelector('[name="'+CSS.escape(c.name)+'"]'); if(byName) return byName;}
+    return null;
+  }
+  function restore(c){
+    c=c||lastCapture; if(!c) return;
+    var el=findSimilar(c); if(!el) return;
+    try{ if('value' in el && el.value!==c.value) el.value=c.value; }catch(e){}
+    try{ el.focus({preventScroll:true}); }catch(e){try{el.focus();}catch(_){} }
+    try{ if(c.start!=null&&el.setSelectionRange) el.setSelectionRange(c.start,c.end); }catch(e){}
+    try{ window.scrollTo(c.scrollX||0,c.scrollY||0); }catch(e){}
+    if(el.id==='searchBox') clientFilter(el);
+  }
+  function wrap(name){
+    var fn=window[name]; if(typeof fn!=='function'||fn.__oskarFocusWrapped) return;
+    var w=function(){var c=cap(); var r=fn.apply(this,arguments); setTimeout(function(){restore(c);},0); setTimeout(function(){restore(c);},40); return r;};
+    w.__oskarFocusWrapped=true; window[name]=w;
+    try{ eval(name+'=window["'+name+'"];'); }catch(e){}
+  }
+  function installWraps(){['renderPage','renderCrud','renderAccounts','renderInvoices','renderDebts','renderWages','renderSettings','renderSuppliers','renderCustomers','renderPurchases','renderExpenses','renderProducts'].forEach(wrap); reapplySearch();}
+  function clientFilter(input){
+    if(!input||input.id!=='searchBox') return;
+    var q=String(input.value||'').toLowerCase();
+    sessionStorage.setItem('oskar_search_'+location.pathname,input.value||'');
+    var root=input.closest('.card')||document.getElementById('mainCard')||document;
+    var rows=root.querySelectorAll('.data-table tbody tr');
+    rows.forEach(function(tr){var text=(tr.textContent||'').toLowerCase(); tr.style.display=!q||text.indexOf(q)>-1?'':'none';});
+    var note=root.querySelector('.muted[style*=margin-top]');
+    if(note){var visibleRows=[].slice.call(rows).filter(function(r){return r.style.display!=='none'&&!/لا توجد بيانات/.test(r.textContent||'')}).length; note.textContent='عرض '+visibleRows+' إدخالات';}
+  }
+  function reapplySearch(){
+    var input=document.getElementById('searchBox'); if(!input) return;
+    var saved=sessionStorage.getItem('oskar_search_'+location.pathname)||'';
+    if(saved && !input.value) input.value=saved;
+    if(input.value) clientFilter(input);
+  }
+  document.addEventListener('input',function(e){
+    if(editable(e.target)) mark();
+    if(e.target&&e.target.id==='searchBox'){
+      e.stopImmediatePropagation();
+      clientFilter(e.target);
+    }
+  },true);
+  document.addEventListener('keydown',function(e){if(editable(e.target)) mark();},true);
+  document.addEventListener('change',function(e){if(editable(e.target)) mark();},true);
+  document.addEventListener('focusin',function(e){if(editable(e.target)) mark();},true);
+  document.addEventListener('DOMContentLoaded',function(){installWraps();setTimeout(installWraps,300);setTimeout(reapplySearch,500);});
+  if(document.readyState!=='loading'){installWraps();setTimeout(installWraps,300);setTimeout(reapplySearch,500);}
 })();
 </script>
 

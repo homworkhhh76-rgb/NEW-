@@ -18,7 +18,7 @@ const firebaseConfig = {
   const DELETE_KEYS=['__deleted','_deletedIds'];
   const META_KEYS=new Set(['lastSyncAt','lastLocalUpdate','lastCloudPull','__deleted','_deletedIds','_syncMeta']);
   const ITEM_META=new Set(['_updatedAt','_createdAt','_deleted','deletedAt','_syncStamp']);
-  const state={snapshot:null,syncTimer:null,pullTimer:null,installTimer:null,applyingRemote:false,lastLocalSaveAt:0,lastUserEditAt:0,lastError:null,started:false};
+  const state={snapshot:null,syncTimer:null,pullTimer:null,installTimer:null,applyingRemote:false,lastLocalSaveAt:0,lastUserEditAt:0,lastError:null,started:false,deferredRenderTimer:null};
 
   function now(){return new Date().toISOString()}
   function isObj(v){return !!v && typeof v==='object' && !Array.isArray(v)}
@@ -39,10 +39,28 @@ const firebaseConfig = {
     const tag=String(el.tagName||'').toLowerCase();
     return tag==='input'||tag==='textarea'||tag==='select'||el.isContentEditable||!!(el.closest&&el.closest('form,.modal,.dialog,[role=dialog]'));
   }
+  function visible(el){
+    if(!el) return false;
+    const s=getComputedStyle(el);
+    return s.display!=='none' && s.visibility!=='hidden' && el.offsetParent!==null;
+  }
+  function pageHasOpenEditor(){
+    try{
+      if(window.oskarForceNoRemoteRender) return true;
+      if(document.querySelector('.scanner[style*="flex"], #reader')) return true;
+      const modal=[...document.querySelectorAll('.modal-back,.modal,[role=dialog]')].some(m=>visible(m)&&m.querySelector('input,textarea,select,form'));
+      if(modal) return true;
+      const main=document.getElementById('mainCard');
+      if(main && main.querySelector('form,#crudForm,#accForm,#editInvoiceForm,#manualDebtForm,#payDebtForm')) return true;
+    }catch(e){}
+    return false;
+  }
   function markUserEditing(){state.lastUserEditAt=Date.now();}
   function userIsEditing(){
+    try{if(typeof window.oskarIsUserEditing==='function' && window.oskarIsUserEditing()) return true;}catch(e){}
+    if(pageHasOpenEditor()) return true;
     if(editableElement(document.activeElement)) return true;
-    return Date.now()-state.lastUserEditAt<12000;
+    return Date.now()-state.lastUserEditAt<30000;
   }
   function itemPublicCopy(x){const o={}; Object.keys(x||{}).sort().forEach(k=>{if(!ITEM_META.has(k))o[k]=x[k]}); return o}
   function itemChanged(a,b){return !sameJSON(itemPublicCopy(a||{}), itemPublicCopy(b||{}))}
@@ -204,13 +222,24 @@ const firebaseConfig = {
     const before=readLocal();
     const cloud=await getCloud(companyKey||before?.settings?.companyKey).catch(e=>{state.lastError=e; return null});
     if(!cloud || !Object.keys(cloud).length) return false;
+    if(userIsEditing()) return false;
     const merged=mergeDB(before,cloud,{prefer:'cloud'}); merged.lastCloudPull=now();
     const changed=!sameJSON(before,merged);
-    if(changed){state.applyingRemote=true; writeLocal(merged); try{window.DB=clone(merged);}catch(e){} state.applyingRemote=false; if(render) refreshPageFromDB();}
+    if(changed){
+      state.applyingRemote=true;
+      writeLocal(merged);
+      try{window.DB=clone(merged);}catch(e){}
+      state.applyingRemote=false;
+      if(render) refreshPageFromDB();
+    }
     return changed;
   }
   function refreshPageFromDB(){
-    if(userIsEditing()) return;
+    if(userIsEditing()){
+      clearTimeout(state.deferredRenderTimer);
+      state.deferredRenderTimer=setTimeout(()=>{if(!userIsEditing()) refreshPageFromDB();},5000);
+      return;
+    }
     try{window.dispatchEvent(new CustomEvent('oskar-db-updated',{detail:{source:'cloud'}}));}catch(e){}
     try{if(typeof window.loadDB==='function') window.DB=window.loadDB();}catch(e){}
     try{if(typeof window.renderPage==='function' && document.readyState!=='loading') window.renderPage();}catch(e){console.warn(e)}
@@ -273,8 +302,8 @@ const firebaseConfig = {
   function startLivePull(){
     clearInterval(state.pullTimer);
     state.pullTimer=setInterval(()=>{if(shouldAutoSync()) pullMerge(readLocal()?.settings?.companyKey,true).catch(e=>console.warn(e));},5000);
-    window.addEventListener('focus',()=>{if(shouldAutoSync()) pullMerge(readLocal()?.settings?.companyKey,true).catch(()=>{})});
-    window.addEventListener('online',()=>{queueSync(readLocal()); pullMerge(readLocal()?.settings?.companyKey,true).catch(()=>{})});
+    window.addEventListener('focus',()=>{if(shouldAutoSync()&&!userIsEditing()) pullMerge(readLocal()?.settings?.companyKey,true).catch(()=>{})});
+    window.addEventListener('online',()=>{queueSync(readLocal()); if(!userIsEditing()) pullMerge(readLocal()?.settings?.companyKey,true).catch(()=>{})});
   }
   document.addEventListener('input',markUserEditing,true);
   document.addEventListener('change',markUserEditing,true);
