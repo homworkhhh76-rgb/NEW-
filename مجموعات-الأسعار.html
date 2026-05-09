@@ -7,6 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <title>مجموعات الأسعار - كاشير أوسكار</title>
 <script src="firebase.js"></script>
+<script src="oskar-core-fix.js"></script>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
 :root{--blue:#0754c9;--green:#21c981;--soft:#eafbe6;--bg:#eef3f8;--text:#1f2937;--muted:#6b7280;--card:#fff;--line:#e5e7eb;--purple:#5b13e8;--danger:#ef4444;--shadow:0 8px 22px rgba(15,23,42,.08)}
@@ -478,47 +479,6 @@ window.renderPage = function(){ensureModernData();let k=CFG.kind;if(k==='invoice
 
 </script>
 
-
-
-<style id="oskar-final-save-restaurant-style">
-.restaurant-menu-entry .menu-head{background:linear-gradient(135deg,#ecfdf5,#dcfce7)!important;border:1px solid #a7f3d0!important;color:#064e3b!important}
-.restaurant-menu-entry .mi{background:linear-gradient(135deg,#0f9f6e,#047857)!important;color:#fff!important}
-.restaurant-menu-entry .submenu a{font-weight:900!important}
-.restaurant-menu-entry.open .arrow{transform:rotate(-90deg)!important}
-.drawer,.drawer .menu{overscroll-behavior:contain!important;-webkit-overflow-scrolling:touch!important;backface-visibility:hidden!important;transform:translateZ(0)!important}
-@media(max-width:1024px),(pointer:coarse){.drawer{will-change:transform!important;transition:transform .18s cubic-bezier(.2,.8,.2,1)!important}.drawer-overlay{backdrop-filter:none!important}.menu{padding-bottom:110px!important}.menu-head,.submenu{transform:translateZ(0)!important}}
-</style>
-<script id="oskar-final-save-sync-and-restaurant-sidebar">
-(function(){
- if(window.__OSKAR_FINAL_SAVE_SYNC_AND_REST_SIDEBAR__)return;window.__OSKAR_FINAL_SAVE_SYNC_AND_REST_SIDEBAR__=true;
- const APP='supermarket_pos_ar_v1';
- const REST_LINKS=[['مطعم-الطاولات.html','الطاولات'],['مطعم-المطبخ.html','المطبخ KDS'],['مطعم-المنيو-الرقمي.html','المنيو الرقمي'],['مطعم-كاشير-المطعم.html','كاشير المطعم'],['مطعم-الوصفات-والتكلفة.html','الوصفات والتكلفة'],['مطعم-مخزون-المطعم.html','مخزون المطعم'],['مطعم-الحجوزات.html','الحجوزات'],['مطعم-تحليلات-الأرباح.html','الأرباح والتحليلات']];
- function readLocal(){try{return JSON.parse(localStorage.getItem(APP)||'{}')||{}}catch(e){return {}}}
- function writeLocal(db){try{localStorage.setItem(APP,JSON.stringify(db||{}))}catch(e){console.error('save failed',e)}}
- function getLex(){try{if(typeof DB!=='undefined'&&DB&&typeof DB==='object')return DB}catch(e){}return null}
- function setLex(db){try{DB=db}catch(e){} window.DB=db}
- function stamp(x){return Date.parse(x?._updatedAt||x?.updatedAt||x?.deletedAt||x?.createdAt||x?.date||0)||0}
- function mergeObj(a,b){const o={...(a||{})};Object.keys(b||{}).forEach(k=>{o[k]={...(o[k]||{}),...(b[k]||{})}});return o}
- function mergeArrays(a,b){const map=new Map(),noid=[];function add(x,src){if(!x||typeof x!=='object')return;if(x.id){const p=map.get(x.id);if(!p||stamp(x)>=stamp(p)||src==='new')map.set(x.id,{...(p||{}),...x});}else{const key=JSON.stringify(x);if(!noid.some(y=>JSON.stringify(y)===key))noid.push(x)}};(a||[]).forEach(x=>add(x,'old'));(b||[]).forEach(x=>add(x,'new'));return [...map.values(),...noid]}
- function mergeDB(a,b){a=a||{};b=b||{};const out={...a,...b};const keys=new Set([...Object.keys(a),...Object.keys(b)]);keys.forEach(k=>{if(Array.isArray(a[k])||Array.isArray(b[k]))out[k]=mergeArrays(a[k]||[],b[k]||[])});out.settings={...(a.settings||{}),...(b.settings||{})};out.__deleted=mergeObj(a.__deleted,b.__deleted);out._deletedIds=mergeObj(a._deletedIds,b._deletedIds);return out}
- function ensure(db){db=db&&typeof db==='object'?db:{};db.settings=db.settings||{};db.settings.currency=db.settings.currency||'₪';['accounts','branches','products','customers','suppliers','sales','purchases','expenses','debts','activityLog','accountMovements','restaurantProducts','restaurantOrders','restaurantSales','restaurantExpenses','restaurantTables','restaurantMenu','restaurantReservations','restaurantWastage','restaurantPayments','restaurantInventoryMovements','restaurantLoyalty','restaurantCategories'].forEach(k=>{if(!Array.isArray(db[k]))db[k]=[]});if(!db.accounts.length)db.accounts.push({id:'cash-main',name:'الصندوق الرئيسي',code:'1001',type:'الأصول المتداولة',balance:0,openingBalance:0,active:'نشط'});if(!db.branches.some(b=>b&&b.id==='branch-restaurant'))db.branches.push({id:'branch-restaurant',name:'المطعم',code:'REST',active:'نشط',isRestaurant:true});if(!db.restaurantTables.length){for(let i=1;i<=10;i++)db.restaurantTables.push({id:'tbl-'+i,name:'طاولة '+i,seats:i<=4?4:6,status:'متاحة',currentOrderId:'',createdAt:new Date().toISOString()})}if(!db.restaurantProducts.length){db.restaurantProducts.push({id:'rprd-1',name:'خبز برجر',unit:'قطعة',stock:100,purchasePrice:1.5,reorderPoint:20,source:'restaurant'},{id:'rprd-2',name:'لحم',unit:'كجم',stock:25,purchasePrice:53.33,reorderPoint:5,source:'restaurant'},{id:'rprd-3',name:'طحين',unit:'كجم',stock:50,purchasePrice:6,reorderPoint:10,source:'restaurant'},{id:'rprd-4',name:'جبنة',unit:'كجم',stock:20,purchasePrice:50,reorderPoint:4,source:'restaurant'},{id:'rprd-5',name:'دجاج',unit:'كجم',stock:30,purchasePrice:36.66,reorderPoint:6,source:'restaurant'})}if(!db.restaurantMenu.length){db.restaurantMenu.push({id:'dish-1',name:'وجبة برجر كلاسيك',category:'وجبات',price:28,active:'نشط',desc:'برجر مع صوص خاص',extras:'جبنة إضافية:3',removes:'بدون بصل',recipe:[{productId:'rprd-1',productName:'خبز برجر',qty:1,unit:'قطعة',costOverride:1.5},{productId:'rprd-2',productName:'لحم',qty:.15,unit:'كجم',costOverride:53.33}]},{id:'dish-2',name:'بيتزا مارجريتا',category:'بيتزا',price:42,active:'نشط',desc:'جبنة وصلصة',extras:'جبنة إضافية:5',removes:'بدون زيتون',recipe:[{productId:'rprd-3',productName:'طحين',qty:.2,unit:'كجم',costOverride:6},{productId:'rprd-4',productName:'جبنة',qty:.12,unit:'كجم',costOverride:50}]})}return db}
- function live(){return ensure(mergeDB(mergeDB(readLocal(),getLex()||{}),window.DB||{}))}
- function saveUnified(db,opts){let merged=ensure(mergeDB(live(),db||{}));merged.lastLocalUpdate=new Date().toISOString();writeLocal(merged);setLex(merged);try{if(typeof updateSyncState==='function')updateSyncState()}catch(e){}if(!opts||opts.sync!==false)scheduleSync();return merged}
- let syncTimer=null;
- function scheduleSync(){clearTimeout(syncTimer);syncTimer=setTimeout(async()=>{if(!navigator.onLine||!window.FirebaseBridge)return;try{const before=saveUnified(readLocal(),{sync:false});const remote=await window.FirebaseBridge.sync(before,{companyKey:before.settings&&before.settings.companyKey});saveUnified(remote,{sync:false})}catch(e){console.warn('background sync skipped',e)}},700)}
- try{window.oskarSaveUnified=saveUnified;window.oskarLiveDB=live}catch(e){}
- try{saveDB=function(db){saveUnified(db,{sync:false})};window.saveDB=saveDB}catch(e){}
- try{collection=function(name){const db=live();if(!Array.isArray(db[name]))db[name]=[];setLex(db);return db[name]};window.collection=collection}catch(e){}
- window.persist=function(){saveUnified(live())};
- window.syncNow=async function(show=true){const btn=document.querySelector('.top-actions button[onclick*="syncNow"],.top-actions button[title*="مزامنة"]');try{if(btn)btn.classList.add('syncing');const local=saveUnified(live(),{sync:false});if(!navigator.onLine||!window.FirebaseBridge){if(show&&window.toast)toast('لا يوجد اتصال، البيانات محفوظة محليًا');return local}const remote=await window.FirebaseBridge.sync(local,{companyKey:local.settings&&local.settings.companyKey});const merged=saveUnified(remote,{sync:false});if(show&&window.toast)toast('تمت المزامنة مع Firebase');try{if(typeof renderPage==='function')renderPage()}catch(e){}return merged}catch(e){console.warn(e);if(show&&window.toast)toast('تعذر المزامنة، البيانات محفوظة محليًا');return live()}finally{if(btn)btn.classList.remove('syncing')}};
- const restaurantIcon='<svg viewBox="0 0 24 24"><path d="M4 10h16"/><path d="M5 10l2 10M19 10l-2 10"/><path d="M8 4h8l2 6H6z"/></svg>';
- function patchRestaurantMenu(){ensure(live());const menu=document.querySelector('.drawer .menu');if(!menu)return;let old=menu.querySelector('.restaurant-menu-entry');if(old)old.remove();const curr=decodeURIComponent(location.pathname.split('/').pop()||'');const open=curr.indexOf('مطعم-')===0?' open':'';const html='<div class="menu-group restaurant-menu-entry'+open+'"><button class="menu-head" onclick="toggleMenu(this)"><span class="mi">'+restaurantIcon+'</span><b>المطعم</b><span class="arrow">‹</span></button><div class="submenu">'+REST_LINKS.map(x=>'<a class="sub" href="'+x[0]+'">'+x[1]+'</a>').join('')+'</div></div>';const groups=[...menu.querySelectorAll('.menu-group')];const sales=groups.find(g=>String(g.querySelector('.menu-head b')?.textContent||'').trim()==='المبيعات');if(sales)sales.insertAdjacentHTML('afterend',html);else menu.insertAdjacentHTML('beforeend',html);menu.querySelectorAll('.restaurant-menu-entry .submenu a').forEach(a=>{if(a.getAttribute('href')===curr)a.style.cssText='font-weight:900;color:#0754c9'});}
- const oldRenderCommon=window.renderCommon;window.renderCommon=function(){if(oldRenderCommon)oldRenderCommon.apply(this,arguments);patchRestaurantMenu();};
- document.addEventListener('DOMContentLoaded',function(){saveUnified(live(),{sync:false});setTimeout(patchRestaurantMenu,60);setTimeout(patchRestaurantMenu,350)});
- if(document.readyState!=='loading'){saveUnified(live(),{sync:false});setTimeout(patchRestaurantMenu,60);setTimeout(patchRestaurantMenu,350)}
- window.addEventListener('online',function(){scheduleSync()});
-})();
-</script>
 
 
 <script id="oskar-final-focus-search-guard">
