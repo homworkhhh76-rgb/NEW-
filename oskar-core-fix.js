@@ -290,3 +290,60 @@
  function install(){addMenu(); let path=decodeURIComponent(location.pathname); if(/الواردات\.html/.test(path))renderImportForm(); if(/سجل-الواردات\.html/.test(path))renderImportLog(); patchDirectInvoice(); employeePerm();}
  document.addEventListener('DOMContentLoaded',()=>{install();setTimeout(install,800);setTimeout(install,2000)}); setTimeout(install,300);
 })();
+
+
+/* ===== Oskar imports real save/sync/sidebar patch ===== */
+(function(){
+  const LS_PREFIX='oskar_';
+  const read=(k,d=[])=>{try{return JSON.parse(localStorage.getItem(k)||localStorage.getItem(LS_PREFIX+k)||JSON.stringify(d))||d}catch(e){return d}};
+  const write=(k,v)=>{localStorage.setItem(k,JSON.stringify(v));localStorage.setItem(LS_PREFIX+k,JSON.stringify(v)); window.dispatchEvent(new CustomEvent('oskar:data-changed',{detail:{key:k}})); try{ if(navigator.onLine && window.firebaseSyncAll) window.firebaseSyncAll(); if(window.OSKAR_SYNC&&OSKAR_SYNC.pushAll) OSKAR_SYNC.pushAll(); }catch(e){} };
+  const id=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+  const num=v=>Number(String(v||0).replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)))||0;
+  function addActivity(text,obj){const a=read('activities',read('activityLog',[])); a.unshift(Object.assign({id:id(),date:new Date().toISOString(),type:'imports',text:text},obj||{})); write('activities',a); write('activityLog',a)}
+  function findProduct(products,pid){return products.find(p=>String(p.id||p.code||p.barcode||p.sku)===String(pid))}
+  window.OSKAR_SAVE_IMPORT=function(data){
+    const products=read('products',read('items',[]));
+    const accounts=read('accounts',[]);
+    const imports=read('imports',read('importRecords',[]));
+    const product=findProduct(products,data.productId);
+    if(!product) throw new Error('اختر الصنف');
+    const qty=num(data.unitQty||data.qty||data.quantity);
+    if(qty<=0) throw new Error('أدخل كمية صحيحة');
+    const totalCost=num(data.totalCost || (qty*num(data.wholesaleUnit)));
+    const wholesaleUnit=num(data.wholesaleUnit || (totalCost/qty));
+    const saleUnit=num(data.saleUnit || product.salePrice || product.price || 0);
+    product.stock=num(product.stock||product.quantity||product.qty)+qty;
+    product.quantity=product.stock; product.qty=product.stock;
+    product.wholesalePrice=wholesaleUnit; product.cost=wholesaleUnit; product.purchasePrice=wholesaleUnit;
+    product.salePrice=saleUnit; product.price=saleUnit;
+    product.updatedAt=new Date().toISOString();
+    const accId=data.accountId||'cash';
+    let account=accounts.find(a=>String(a.id)===String(accId)||String(a.name)===String(accId));
+    if(account){account.balance=num(account.balance)-totalCost; account.updatedAt=new Date().toISOString(); write('accounts',accounts)}
+    else {let cash=num(localStorage.getItem('cashBox')||localStorage.getItem('oskar_cashBox')); localStorage.setItem('cashBox',String(cash-totalCost)); localStorage.setItem('oskar_cashBox',String(cash-totalCost));}
+    const rec={id:id(),date:new Date().toISOString(),supplierId:data.supplierId||'',supplierName:data.supplierName||'',productId:product.id||product.code||product.barcode,productName:product.name||product.title,unit:data.unit||'وحدة',quantityUnits:qty,totalCost,wholesaleUnit,saleUnit,accountId:accId,note:data.note||''};
+    imports.unshift(rec);
+    const moves=read('stockMovements',[]); moves.unshift({id:id(),date:rec.date,type:'import',productId:rec.productId,productName:rec.productName,qty:qty,stockAfter:product.stock,ref:rec.id});
+    write('products',products); write('items',products); write('imports',imports); write('importRecords',imports); write('stockMovements',moves);
+    addActivity('إضافة واردات: '+rec.productName+' كمية '+qty,{ref:rec.id,total:totalCost});
+    return rec;
+  };
+  function enhanceImportsPage(){
+    if(!/الواردات/.test(location.href+document.body.innerText))return;
+    const btn=[...document.querySelectorAll('button,input[type=button],input[type=submit]')].find(b=>/حفظ|ترحيل|إضافة/.test(b.textContent||b.value||''));
+    if(!btn||btn.dataset.oskarImportFixed)return; btn.dataset.oskarImportFixed='1';
+    btn.addEventListener('click',function(ev){
+      try{
+        const g=n=>document.querySelector('[name="'+n+'"],#'+n);
+        const unit=(g('unit')&&g('unit').value)||'';
+        const cartons=num(g('cartons')&&g('cartons').value), per=num(g('unitsPerCarton')&&g('unitsPerCarton').value)||1;
+        const qty=cartons>0?cartons*per:num((g('quantity')||g('qty')||g('unitQty')||{}).value);
+        const totalCost=cartons>0?num((g('cartonWholesale')||g('wholesaleCarton')||{}).value)*cartons:num((g('totalCost')||{}).value)||qty*num((g('wholesaleUnit')||g('cost')||{}).value);
+        const saleUnit=cartons>0?num((g('cartonSale')||g('saleCarton')||{}).value)/per:num((g('saleUnit')||g('price')||{}).value);
+        window.OSKAR_SAVE_IMPORT({productId:(g('productId')||g('product')||{}).value,supplierId:(g('supplierId')||g('supplier')||{}).value,accountId:(g('accountId')||g('account')||{}).value,unit,unitQty:qty,totalCost,wholesaleUnit:qty?totalCost/qty:0,saleUnit});
+        alert('تم حفظ الواردة وتحديث المخزون وخصم الحساب');
+      }catch(e){alert(e.message||'تعذر حفظ الواردة')}
+    },true);
+  }
+  document.addEventListener('DOMContentLoaded',enhanceImportsPage); setTimeout(enhanceImportsPage,800);
+})();
