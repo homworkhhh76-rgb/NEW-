@@ -218,7 +218,7 @@ const firebaseConfig = {
   async function pullMerge(companyKey,render=true){
     if(!navigator.onLine) return false;
     if(userIsEditing()) return false;
-    if(Date.now()-state.lastLocalSaveAt<600) return false;
+    if(Date.now()-state.lastLocalSaveAt<1800) return false;
     const before=readLocal();
     const cloud=await getCloud(companyKey||before?.settings?.companyKey).catch(e=>{state.lastError=e; return null});
     if(!cloud || !Object.keys(cloud).length) return false;
@@ -237,7 +237,7 @@ const firebaseConfig = {
   function refreshPageFromDB(){
     if(userIsEditing()){
       clearTimeout(state.deferredRenderTimer);
-      state.deferredRenderTimer=setTimeout(()=>{if(!userIsEditing()) refreshPageFromDB();},1000);
+      state.deferredRenderTimer=setTimeout(()=>{if(!userIsEditing()) refreshPageFromDB();},5000);
       return;
     }
     try{window.dispatchEvent(new CustomEvent('oskar-db-updated',{detail:{source:'cloud'}}));}catch(e){}
@@ -301,7 +301,7 @@ const firebaseConfig = {
   }
   function startLivePull(){
     clearInterval(state.pullTimer);
-    state.pullTimer=setInterval(()=>{if(shouldAutoSync()) pullMerge(readLocal()?.settings?.companyKey,true).catch(e=>console.warn(e));},1000);
+    state.pullTimer=setInterval(()=>{if(shouldAutoSync()) pullMerge(readLocal()?.settings?.companyKey,true).catch(e=>console.warn(e));},5000);
     window.addEventListener('focus',()=>{if(shouldAutoSync()&&!userIsEditing()) pullMerge(readLocal()?.settings?.companyKey,true).catch(()=>{})});
     window.addEventListener('online',()=>{queueSync(readLocal()); if(!userIsEditing()) pullMerge(readLocal()?.settings?.companyKey,true).catch(()=>{})});
   }
