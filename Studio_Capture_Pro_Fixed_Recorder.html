@@ -1,0 +1,873 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Studio Capture Pro Fixed Recorder</title>
+<style>
+:root{
+  --bg:#071019;--panel:#0d1724;--panel2:#111d2c;--line:#263951;--text:#f8fafc;
+  --muted:#91a3b8;--green:#10b981;--green2:#059669;--blue:#2563eb;--red:#dc2626;
+  --amber:#d97706;--dark:#172538;--radius:18px
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  min-height:100vh;color:var(--text);font-family:Arial,Tahoma,"Segoe UI",sans-serif;
+  background:
+    radial-gradient(900px 500px at 95% -10%,rgba(16,185,129,.14),transparent 60%),
+    radial-gradient(800px 500px at -10% 0%,rgba(37,99,235,.12),transparent 60%),
+    var(--bg)
+}
+body.locked{overflow:hidden}
+button,input,select{font:inherit}
+.app{max-width:1580px;margin:auto;padding:14px}
+.topbar{
+  position:sticky;top:10px;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:14px 16px;border:1px solid var(--line);border-radius:22px;
+  background:rgba(13,23,36,.92);backdrop-filter:blur(14px);box-shadow:0 20px 50px rgba(0,0,0,.28)
+}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{
+  width:46px;height:46px;border-radius:16px;display:grid;place-items:center;
+  background:linear-gradient(135deg,var(--green),var(--green2));box-shadow:0 12px 26px rgba(16,185,129,.25)
+}
+.logo svg{width:25px;height:25px}
+.brand h1{margin:0 0 4px;font-size:18px}
+.brand p{margin:0;font-size:12px;color:var(--muted)}
+.statusWrap{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.status{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.dot{width:9px;height:9px;border-radius:50%;background:#64748b;box-shadow:0 0 0 4px rgba(100,116,139,.14)}
+.dot.ok{background:var(--green);box-shadow:0 0 0 4px rgba(16,185,129,.14)}
+.dot.rec{background:#ef4444;box-shadow:0 0 0 4px rgba(239,68,68,.16);animation:pulse 1s infinite}
+.recPill{
+  display:none;align-items:center;gap:8px;padding:8px 11px;border-radius:999px;
+  border:1px solid rgba(239,68,68,.28);background:rgba(239,68,68,.12);font-size:12px
+}
+.recPill.show{display:flex}
+.recPill i{width:8px;height:8px;border-radius:50%;background:#ef4444;animation:pulse 1s infinite}
+.timer{direction:ltr;font-variant-numeric:tabular-nums}
+@keyframes pulse{50%{transform:scale(.7);opacity:.65}}
+
+.compat{
+  margin-top:14px;padding:13px 15px;border-radius:16px;border:1px solid #2a405a;
+  background:#101b2a;font-size:13px;line-height:1.8;color:#dce6f1
+}
+.compat.good{border-color:rgba(16,185,129,.34);background:rgba(16,185,129,.08)}
+.compat.warn{border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.10);color:#fff4d8}
+.compat strong{color:#fff}
+
+.layout{display:grid;grid-template-columns:430px minmax(0,1fr);gap:18px;margin-top:18px}
+.panel{background:rgba(13,23,36,.92);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 22px 60px rgba(0,0,0,.24)}
+.controls{padding:15px;position:sticky;top:98px;align-self:start}
+.section{padding:14px 0;border-bottom:1px solid var(--line)}
+.section:first-child{padding-top:0}
+.section:last-child{border-bottom:0;padding-bottom:0}
+.section h3{margin:0 0 12px;font-size:14px}
+.label{display:block;margin:0 0 7px;font-size:12px;color:var(--muted)}
+.field,.select{width:100%;padding:12px 13px;border-radius:12px;border:1px solid #2b405b;background:#09121d;color:#fff;outline:none}
+.field:focus,.select:focus{border-color:rgba(16,185,129,.8);box-shadow:0 0 0 3px rgba(16,185,129,.1)}
+.row{display:grid;gap:9px}
+.two{grid-template-columns:1fr 1fr}
+.three{grid-template-columns:repeat(3,1fr)}
+.btn{
+  border:0;border-radius:12px;min-height:44px;padding:11px 13px;cursor:pointer;font-weight:700;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:.18s
+}
+.btn:hover{transform:translateY(-1px)}
+.btn:active{transform:translateY(0)}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+.btn.primary{background:linear-gradient(135deg,var(--green),var(--green2));color:#fff}
+.btn.dark{background:var(--dark);color:#eef4fb;border:1px solid #2b405b}
+.btn.blue{background:linear-gradient(135deg,#4f8cf7,var(--blue));color:#fff}
+.btn.red{background:linear-gradient(135deg,#ef4444,var(--red));color:#fff}
+.btn.amber{background:linear-gradient(135deg,#f6b34a,var(--amber));color:#111827}
+.hint{font-size:11px;color:#8295ab;line-height:1.7;margin-top:8px}
+
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.card{
+  border:1px solid #2b405b;background:#0a121c;color:#fff;border-radius:14px;padding:12px;text-align:right;cursor:pointer
+}
+.card.active{border-color:var(--green);background:rgba(16,185,129,.08)}
+.card strong{display:block;font-size:13px;margin-bottom:4px}
+.card span{font-size:11px;color:var(--muted)}
+
+.chips{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+.chip{
+  border:1px solid #2b405b;background:#09111a;color:#d3dbe7;border-radius:11px;padding:10px 6px;font-size:12px;text-align:center;cursor:pointer
+}
+.chip.active{border-color:var(--green);background:rgba(16,185,129,.10);color:#fff}
+
+.toggle{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0}
+.switch{position:relative;width:46px;height:25px;flex:none}
+.switch input{display:none}
+.slider{position:absolute;inset:0;background:#2a3e59;border-radius:999px;cursor:pointer;transition:.2s}
+.slider:after{content:"";position:absolute;top:3px;right:3px;width:19px;height:19px;background:#fff;border-radius:50%;transition:.2s}
+.switch input:checked + .slider{background:var(--green2)}
+.switch input:checked + .slider:after{transform:translateX(-21px)}
+
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.info{border:1px solid #2b405b;background:#101827;border-radius:12px;padding:10px 12px;font-size:12px;color:#e3ebf5}
+.info small{display:block;color:var(--muted);font-size:11px;margin-top:3px}
+
+.workspace{padding:14px}
+.workspace-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:2px 2px 12px}
+.workspace-head h2{margin:0;font-size:15px}
+.tiny{font-size:11px;color:var(--muted)}
+.badge{display:inline-flex;align-items:center;gap:6px;border:1px solid #2b405b;background:#132031;color:#ced8e4;border-radius:999px;padding:6px 10px;font-size:11px}
+.stage{
+  min-height:760px;border-radius:18px;padding:18px;border:1px solid #223248;
+  background:
+    linear-gradient(45deg,#0b121b 25%,transparent 25%),
+    linear-gradient(-45deg,#0b121b 25%,transparent 25%),
+    linear-gradient(45deg,transparent 75%,#0b121b 75%),
+    linear-gradient(-45deg,transparent 75%,#0b121b 75%),
+    #071019;
+  background-size:28px 28px;background-position:0 0,0 14px,14px -14px,-14px 0;
+  display:flex;align-items:center;justify-content:center;overflow:auto
+}
+.viewer{position:relative;transform-origin:center center;transition:transform .18s}
+.shell{position:relative;margin:auto}
+.viewport{position:relative;overflow:hidden;background:#fff;box-shadow:inset 0 0 0 1px rgba(0,0,0,.05)}
+.viewport iframe{display:block;border:0;background:#fff}
+.shell.browser{border-radius:18px;overflow:hidden;background:#dfe5ee;box-shadow:0 24px 70px rgba(0,0,0,.34)}
+.chrome-bar{height:50px;background:linear-gradient(#f7f8fa,#eceff4);border-bottom:1px solid #d7dde5;display:flex;align-items:center;gap:12px;padding:0 18px}
+.dots{display:flex;gap:7px}.dots i{display:block;width:10px;height:10px;border-radius:50%;background:#cfd6de}
+.browser-url{flex:1;height:34px;border-radius:999px;border:1px solid #d6dce5;background:#fff;display:flex;align-items:center;padding:0 14px;color:#788395;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:ltr}
+.shell.monitor{padding:18px 18px 0;border-radius:18px;background:#11161d;box-shadow:0 28px 80px rgba(0,0,0,.42)}
+.monitor-stand{width:18%;height:24px;background:linear-gradient(#9299a4,#707784);margin:0 auto;border-radius:0 0 12px 12px}
+.monitor-base{width:44%;height:14px;background:linear-gradient(#b6bcc6,#7c838e);margin:8px auto 0;border-radius:999px}
+.shell.laptop{padding:16px 16px 0}
+.laptop-top{padding:14px;background:#11151b;border-radius:22px 22px 12px 12px;position:relative;box-shadow:0 28px 90px rgba(0,0,0,.45)}
+.cam{position:absolute;top:9px;left:50%;transform:translateX(-50%);width:7px;height:7px;border-radius:50%;background:#2f3742}
+.laptop-base{width:112%;margin-right:-6%;height:24px;background:linear-gradient(#c9ced6,#8d949f);border-radius:3px 3px 18px 18px;box-shadow:0 12px 24px rgba(0,0,0,.35);position:relative}
+.laptop-base:before{content:"";position:absolute;left:50%;transform:translateX(-50%);top:0;width:13%;height:7px;background:#aab0ba;border-radius:0 0 8px 8px}
+.shell.tablet{padding:18px;background:#141922;border-radius:28px;box-shadow:0 28px 80px rgba(0,0,0,.45)}
+.tablet-notch{position:absolute;top:8px;left:50%;transform:translateX(-50%);width:58px;height:6px;border-radius:999px;background:#2d3440}
+.shell.mobile{padding:16px;background:#10151d;border-radius:32px;box-shadow:0 28px 80px rgba(0,0,0,.45)}
+.mobile-notch{position:absolute;top:9px;left:50%;transform:translateX(-50%);width:34%;height:22px;border-radius:0 0 18px 18px;background:#0b0f15;z-index:3}
+
+.captureBox{display:none;margin-top:14px;border:1px solid #2b405b;border-radius:14px;overflow:hidden;background:#05080d}
+.captureBox.show{display:block}
+.captureHead{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;background:#0d141e}
+.captureBox video{width:100%;max-height:480px;display:block;background:#000}
+
+.cleanOverlay{
+  position:fixed;inset:0;z-index:100;display:none;background:#040a12;align-items:center;justify-content:center;overflow:hidden
+}
+.cleanOverlay.show{display:flex}
+.cleanStage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:12px;overflow:hidden}
+.cleanViewer{transform-origin:center center}
+.cleanToolbar{position:absolute;top:10px;left:10px;right:10px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;z-index:101}
+.cleanToolbar .group{display:flex;gap:8px;flex-wrap:wrap}
+.cleanNote{font-size:12px;color:#dbe6f3;background:rgba(15,24,37,.82);border:1px solid #2a3d57;border-radius:999px;padding:8px 12px}
+.cleanRecBar{
+  position:absolute;bottom:10px;left:50%;transform:translateX(-50%);display:flex;gap:8px;flex-wrap:wrap;z-index:101
+}
+
+.toast{
+  position:fixed;left:50%;bottom:22px;transform:translate(-50%,16px);opacity:0;pointer-events:none;
+  background:#111827;color:#fff;border:1px solid #2b405b;border-radius:12px;padding:11px 14px;
+  box-shadow:0 15px 50px rgba(0,0,0,.35);transition:.2s;z-index:150
+}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+@media(max-width:1080px){.layout{grid-template-columns:1fr}.controls{position:static}.stage{min-height:520px}}
+@media(max-width:640px){
+  .app{padding:10px}.topbar{padding:12px}.brand p{display:none}.cards{grid-template-columns:1fr}
+  .chips{grid-template-columns:repeat(2,1fr)}.two,.three{grid-template-columns:1fr}.info-grid{grid-template-columns:1fr}
+  .stage{padding:10px;min-height:340px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>
+        </svg>
+      </div>
+      <div>
+        <h1>Studio Capture Pro</h1>
+        <p>معاينة ثابتة + تسجيل شاشة + لقطات PNG + قوالب جاهزة</p>
+      </div>
+    </div>
+    <div class="statusWrap">
+      <div class="recPill" id="recPill"><i></i><span>REC</span><strong class="timer" id="timer">00:00:00</strong></div>
+      <div class="status"><span class="dot" id="dot"></span><span id="statusText">جاهز</span></div>
+    </div>
+  </header>
+
+  <div class="compat" id="compatBox">جاري فحص إمكانية تسجيل الشاشة...</div>
+
+  <main class="layout">
+    <aside class="panel controls">
+      <div class="section">
+        <h3>1) رابط الموقع</h3>
+        <label class="label">رابط الموقع</label>
+        <input id="siteUrl" class="field" value="https://example.com" placeholder="https://example.com">
+        <div class="row two" style="margin-top:9px">
+          <button class="btn primary" id="loadBtn">تحميل</button>
+          <button class="btn dark" id="openSiteBtn">فتح بالمستعرض</button>
+        </div>
+        <div class="hint">يتم تصحيح الرابط تلقائيًا لو كتبته مثل /https://example.com أو بدون https.</div>
+      </div>
+
+      <div class="section">
+        <h3>2) قالب الشاشة</h3>
+        <div class="cards" id="deviceCards">
+          <button class="card active" data-device="laptop"><strong>لابتوب</strong><span>أفضل قالب لسطح المكتب</span></button>
+          <button class="card" data-device="monitor"><strong>شاشة مكتبية</strong><span>Monitor احترافي</span></button>
+          <button class="card" data-device="browser"><strong>متصفح</strong><span>إطار Browser فقط</span></button>
+          <button class="card" data-device="tablet"><strong>تابلت</strong><span>واجهة متوسطة</span></button>
+          <button class="card" data-device="mobile"><strong>جوال</strong><span>واجهة هاتف</span></button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>3) المقاسات الجاهزة</h3>
+        <div class="chips" id="presetChips">
+          <button class="chip active" data-w="1440" data-h="900">1440×900</button>
+          <button class="chip" data-w="1366" data-h="768">1366×768</button>
+          <button class="chip" data-w="1920" data-h="1080">1920×1080</button>
+          <button class="chip" data-w="1280" data-h="720">1280×720</button>
+          <button class="chip" data-w="1024" data-h="1366">1024×1366</button>
+          <button class="chip" data-w="390" data-h="844">390×844</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>4) مقاس يدوي</h3>
+        <div class="row three">
+          <input id="customW" class="field" type="number" min="200" value="1440">
+          <input id="customH" class="field" type="number" min="200" value="900">
+          <button class="btn primary" id="applySizeBtn">تطبيق</button>
+        </div>
+        <div class="row two" style="margin-top:9px">
+          <button class="btn dark" id="swapBtn">تبديل</button>
+          <button class="btn dark" id="fitBtn">ملاءمة</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>5) وضع التصوير الثابت</h3>
+        <div class="row two">
+          <button class="btn primary" id="cleanModeBtn">فتح الوضع الثابت</button>
+          <button class="btn dark" id="fullscreenBtn">ملء الشاشة</button>
+        </div>
+        <div class="hint">هذا الوضع يثبت إطار الجهاز في منتصف الشاشة ويمنع سكرول الصفحة أثناء التصوير.</div>
+      </div>
+
+      <div class="section">
+        <h3>6) تسجيل الشاشة</h3>
+
+        <div class="chips" id="qualityChips">
+          <button class="chip" data-q="720">HD 720</button>
+          <button class="chip active" data-q="1080">FHD 1080</button>
+          <button class="chip" data-q="2160">4K</button>
+        </div>
+
+        <div style="height:10px"></div>
+        <label class="label">FPS</label>
+        <select id="fps" class="select">
+          <option value="30">30 FPS</option>
+          <option value="60" selected>60 FPS</option>
+        </select>
+
+        <div class="toggle">
+          <div><div style="font-size:12px">صوت النظام</div><div class="tiny">إذا كان النظام يسمح</div></div>
+          <label class="switch"><input type="checkbox" id="systemAudio" checked><span class="slider"></span></label>
+        </div>
+
+        <div class="toggle">
+          <div><div style="font-size:12px">الميكروفون</div><div class="tiny">تعليق صوتي أثناء التسجيل</div></div>
+          <label class="switch"><input type="checkbox" id="micAudio"><span class="slider"></span></label>
+        </div>
+
+        <div class="row" style="margin-top:8px">
+          <button class="btn blue" id="pickScreenBtn">اختيار الشاشة / التبويب</button>
+          <div class="row two">
+            <button class="btn red" id="startRecBtn" disabled>بدء التسجيل</button>
+            <button class="btn dark" id="stopRecBtn" disabled>إيقاف</button>
+          </div>
+          <button class="btn amber" id="shotBtn" disabled>لقطة شاشة PNG</button>
+        </div>
+
+        <div class="hint" id="captureHint"></div>
+      </div>
+
+      <div class="section">
+        <h3>7) معلومات</h3>
+        <div class="info-grid">
+          <div class="info" id="infoDevice">Device: Laptop<small>القالب الحالي</small></div>
+          <div class="info" id="infoSize">Size: 1440 × 900<small>مقاس مساحة الموقع</small></div>
+          <div class="info" id="infoScale">Scale: —<small>نسبة التصغير</small></div>
+          <div class="info" id="infoCapture">Capture: —<small>مصدر التسجيل</small></div>
+        </div>
+      </div>
+    </aside>
+
+    <section class="panel workspace">
+      <div class="workspace-head">
+        <div>
+          <h2>المعاينة</h2>
+          <div class="tiny">الموقع يُعرض بمقاس Desktop داخلي ثم يتم تصغيره بصريًا داخل إطار الجهاز.</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <span class="badge" id="badgeDevice">Laptop</span>
+          <span class="badge" id="badgeSize">1440 × 900</span>
+        </div>
+      </div>
+
+      <div class="stage" id="stage">
+        <div class="viewer" id="viewer"></div>
+      </div>
+
+      <div class="captureBox" id="captureBox">
+        <div class="captureHead">
+          <span>معاينة مصدر التسجيل</span>
+          <span class="badge">LIVE</span>
+        </div>
+        <video id="captureVideo" autoplay muted playsinline></video>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="cleanOverlay" id="cleanOverlay">
+  <div class="cleanToolbar">
+    <div class="group">
+      <button class="btn dark" id="closeCleanBtn">إغلاق</button>
+      <button class="btn dark" id="cleanFitBtn">ملاءمة</button>
+      <button class="btn dark" id="zoomInBtn">تكبير +</button>
+      <button class="btn dark" id="zoomOutBtn">تصغير -</button>
+    </div>
+    <div class="cleanNote">وضع تصوير ثابت — الإطار لا يتحرك مع الصفحة</div>
+    <div class="group">
+      <button class="btn primary" id="cleanFullscreenBtn">Fullscreen</button>
+    </div>
+  </div>
+
+  <div class="cleanStage" id="cleanStage">
+    <div class="cleanViewer" id="cleanViewer"></div>
+  </div>
+
+  <div class="cleanRecBar">
+    <button class="btn blue" id="cleanPickBtn">اختيار الشاشة</button>
+    <button class="btn red" id="cleanStartBtn" disabled>بدء التسجيل</button>
+    <button class="btn dark" id="cleanStopBtn" disabled>إيقاف</button>
+    <button class="btn amber" id="cleanShotBtn" disabled>PNG</button>
+  </div>
+</div>
+
+<canvas id="shotCanvas" style="display:none"></canvas>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+
+  let device = 'laptop';
+  let viewportW = 1440;
+  let viewportH = 900;
+  let cleanZoom = 1;
+  let quality = 1080;
+
+  let displayStream = null;
+  let micStream = null;
+  let recorder = null;
+  let chunks = [];
+  let timerInt = null;
+  let startedAt = 0;
+
+  const viewer = $('#viewer');
+  const stage = $('#stage');
+  const cleanOverlay = $('#cleanOverlay');
+  const cleanViewer = $('#cleanViewer');
+  const cleanStage = $('#cleanStage');
+  const captureVideo = $('#captureVideo');
+  const captureBox = $('#captureBox');
+
+  const hasMediaDevices = !!navigator.mediaDevices;
+  const hasDisplayMedia = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+  const hasMediaRecorder = typeof MediaRecorder !== 'undefined';
+  const secure = window.isSecureContext;
+  const canInternalRecord = secure && hasDisplayMedia && hasMediaRecorder;
+
+  function toast(msg){
+    const el = $('#toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toast.t);
+    toast.t = setTimeout(() => el.classList.remove('show'), 2400);
+  }
+
+  function setStatus(text, mode=''){
+    $('#statusText').textContent = text;
+    $('#dot').className = 'dot' + (mode ? ' ' + mode : '');
+  }
+
+  function normalizeUrl(v){
+    v = (v || '').trim();
+    v = v.replace(/^\/+(?=https?:\/\/)/i,'');
+    v = v.replace(/\s+/g,'');
+    if(v && !/^https?:\/\//i.test(v)) v = 'https://' + v;
+    return v || 'https://example.com';
+  }
+
+  function deviceLabel(d){
+    return ({laptop:'Laptop',monitor:'Monitor',browser:'Browser',tablet:'Tablet',mobile:'Mobile'})[d] || d;
+  }
+
+  function shellHtml(d,w,h,src){
+    if(d === 'browser'){
+      return `
+        <div class="shell browser" id="shell">
+          <div class="chrome-bar">
+            <div class="dots"><i></i><i></i><i></i></div>
+            <div class="browser-url">${src}</div>
+          </div>
+          <div class="viewport" style="width:${w}px;height:${h}px">
+            <iframe src="${src}" style="width:${w}px;height:${h}px"></iframe>
+          </div>
+        </div>`;
+    }
+
+    if(d === 'monitor'){
+      return `
+        <div class="shell monitor" id="shell">
+          <div class="viewport" style="width:${w}px;height:${h}px">
+            <iframe src="${src}" style="width:${w}px;height:${h}px"></iframe>
+          </div>
+          <div class="monitor-stand"></div>
+          <div class="monitor-base"></div>
+        </div>`;
+    }
+
+    if(d === 'tablet'){
+      return `
+        <div class="shell tablet" id="shell">
+          <div class="tablet-notch"></div>
+          <div class="viewport" style="width:${w}px;height:${h}px">
+            <iframe src="${src}" style="width:${w}px;height:${h}px"></iframe>
+          </div>
+        </div>`;
+    }
+
+    if(d === 'mobile'){
+      return `
+        <div class="shell mobile" id="shell">
+          <div class="mobile-notch"></div>
+          <div class="viewport" style="width:${w}px;height:${h}px">
+            <iframe src="${src}" style="width:${w}px;height:${h}px"></iframe>
+          </div>
+        </div>`;
+    }
+
+    return `
+      <div class="shell laptop" id="shell">
+        <div class="laptop-top">
+          <div class="cam"></div>
+          <div class="viewport" style="width:${w}px;height:${h}px">
+            <iframe src="${src}" style="width:${w}px;height:${h}px"></iframe>
+          </div>
+        </div>
+        <div class="laptop-base"></div>
+      </div>`;
+  }
+
+  function updateInfo(url){
+    $('#infoDevice').innerHTML = `Device: ${deviceLabel(device)}<small>القالب الحالي</small>`;
+    $('#infoSize').innerHTML = `Size: ${viewportW} × ${viewportH}<small>مقاس مساحة الموقع</small>`;
+    $('#badgeDevice').textContent = deviceLabel(device);
+    $('#badgeSize').textContent = `${viewportW} × ${viewportH}`;
+    $('#customW').value = viewportW;
+    $('#customH').value = viewportH;
+  }
+
+  function fitMain(){
+    const shell = viewer.querySelector('#shell');
+    if(!shell) return;
+    viewer.style.transform = 'scale(1)';
+    const sr = shell.getBoundingClientRect();
+    const tr = stage.getBoundingClientRect();
+    const scale = Math.min((tr.width-30)/sr.width,(tr.height-30)/sr.height,1);
+    viewer.style.transform = `scale(${scale})`;
+    $('#infoScale').innerHTML = `Scale: ${scale.toFixed(2)}x<small>نسبة التصغير</small>`;
+  }
+
+  function fitClean(reset=true){
+    const shell = cleanViewer.querySelector('#shell');
+    if(!shell) return;
+    if(reset) cleanZoom = 1;
+    cleanViewer.style.transform = 'scale(1)';
+    const sr = shell.getBoundingClientRect();
+    const tr = cleanStage.getBoundingClientRect();
+    const auto = Math.min((tr.width-24)/sr.width,(tr.height-24)/sr.height,1);
+    cleanViewer.style.transform = `scale(${auto*cleanZoom})`;
+  }
+
+  function renderMain(){
+    const url = normalizeUrl($('#siteUrl').value);
+    $('#siteUrl').value = url;
+    viewer.innerHTML = shellHtml(device,viewportW,viewportH,url);
+    updateInfo(url);
+    fitMain();
+    setStatus('تم تحميل المعاينة','ok');
+  }
+
+  function renderClean(){
+    const url = normalizeUrl($('#siteUrl').value);
+    cleanViewer.innerHTML = shellHtml(device,viewportW,viewportH,url);
+    fitClean(true);
+  }
+
+  async function goFullscreen(el){
+    try{
+      if(el.requestFullscreen) await el.requestFullscreen();
+      else if(el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
+    }catch(e){}
+  }
+
+  function setupCompatibility(){
+    const box = $('#compatBox');
+    const hint = $('#captureHint');
+
+    if(canInternalRecord){
+      box.className = 'compat good';
+      box.innerHTML = '<strong>التسجيل الداخلي متاح.</strong> اضغط «اختيار الشاشة / التبويب» ثم اختر هذا التبويب أو الشاشة التي تريد تسجيلها.';
+      hint.textContent = 'بعد اختيار المصدر يمكنك التسجيل وحفظ الفيديو WebM والتقاط PNG.';
+    }else{
+      box.className = 'compat warn';
+
+      let reasons = [];
+      if(!secure) reasons.push('الصفحة ليست في Secure Context');
+      if(!hasDisplayMedia) reasons.push('getDisplayMedia غير متاح في هذا المتصفح/الجهاز');
+      if(!hasMediaRecorder) reasons.push('MediaRecorder غير متاح');
+
+      box.innerHTML =
+        '<strong>التسجيل الداخلي غير متاح على هذا الجهاز بهذه الطريقة.</strong> ' +
+        (reasons.length ? 'السبب: ' + reasons.join(' — ') + '. ' : '') +
+        'هذا لا يعني أن الملف خربان. زر التسجيل سيظل موجودًا، لكن المتصفح نفسه لا يوفّر واجهة مشاركة الشاشة للصفحة. استخدم وضع التصوير الثابت مع مسجل شاشة الهاتف، أو افتح نفس الملف على Chrome/Edge على لابتوب.';
+
+      hint.textContent = 'إذا زر اختيار الشاشة غير متاح، فهذا قيد من المتصفح/النظام وليس من الملف.';
+      $('#pickScreenBtn').disabled = true;
+      $('#cleanPickBtn').disabled = true;
+    }
+  }
+
+  function captureConstraints(){
+    const fps = parseInt($('#fps').value,10) || 60;
+    const map = {720:[1280,720],1080:[1920,1080],2160:[3840,2160]};
+    const [w,h] = map[quality] || map[1080];
+    return {
+      video:{
+        width:{ideal:w},
+        height:{ideal:h},
+        frameRate:{ideal:fps,max:fps}
+      },
+      audio:$('#systemAudio').checked
+    };
+  }
+
+  function syncCaptureButtons(selected,recording=false){
+    $('#startRecBtn').disabled = !selected || recording;
+    $('#stopRecBtn').disabled = !recording;
+    $('#shotBtn').disabled = !selected;
+
+    $('#cleanStartBtn').disabled = !selected || recording;
+    $('#cleanStopBtn').disabled = !recording;
+    $('#cleanShotBtn').disabled = !selected;
+  }
+
+  async function stopDisplayStream(){
+    if(displayStream){
+      displayStream.getTracks().forEach(t => t.stop());
+      displayStream = null;
+    }
+    captureVideo.srcObject = null;
+    captureBox.classList.remove('show');
+    syncCaptureButtons(false,false);
+    $('#infoCapture').innerHTML = 'Capture: —<small>مصدر التسجيل</small>';
+  }
+
+  async function pickScreen(){
+    if(!canInternalRecord){
+      toast('هذا الجهاز لا يوفّر Screen Capture API للصفحة');
+      return;
+    }
+
+    try{
+      if(displayStream) await stopDisplayStream();
+
+      displayStream = await navigator.mediaDevices.getDisplayMedia(captureConstraints());
+
+      captureVideo.srcObject = displayStream;
+      captureBox.classList.add('show');
+      syncCaptureButtons(true,false);
+
+      const vt = displayStream.getVideoTracks()[0];
+      if(vt){
+        vt.onended = async () => {
+          if(recorder && recorder.state !== 'inactive') recorder.stop();
+          await stopDisplayStream();
+        };
+      }
+
+      setTimeout(() => {
+        const s = vt && vt.getSettings ? vt.getSettings() : {};
+        const rw = s.width || captureVideo.videoWidth || '—';
+        const rh = s.height || captureVideo.videoHeight || '—';
+        const rf = Math.round(s.frameRate || 0) || '—';
+        $('#infoCapture').innerHTML = `Capture: ${rw} × ${rh} @ ${rf}fps<small>مصدر التسجيل</small>`;
+      },500);
+
+      setStatus('تم اختيار مصدر التسجيل','ok');
+      toast('تم اختيار الشاشة / التبويب');
+    }catch(err){
+      console.error(err);
+      toast('تم إلغاء اختيار الشاشة أو منع الإذن');
+    }
+  }
+
+  async function buildRecordingStream(){
+    const tracks = [];
+
+    displayStream.getVideoTracks().forEach(t => tracks.push(t));
+    displayStream.getAudioTracks().forEach(t => tracks.push(t));
+
+    if($('#micAudio').checked && hasMediaDevices){
+      try{
+        micStream = await navigator.mediaDevices.getUserMedia({
+          audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},
+          video:false
+        });
+        micStream.getAudioTracks().forEach(t => tracks.push(t));
+      }catch(e){
+        toast('تعذر فتح الميكروفون، سيستمر التسجيل بدونه');
+      }
+    }
+
+    return new MediaStream(tracks);
+  }
+
+  function bestMime(){
+    const types = [
+      'video/webm;codecs=vp9,opus',
+      'video/webm;codecs=vp8,opus',
+      'video/webm'
+    ];
+    return types.find(t => MediaRecorder.isTypeSupported(t)) || '';
+  }
+
+  async function startRecording(){
+    if(!displayStream) return;
+
+    try{
+      const stream = await buildRecordingStream();
+      const mime = bestMime();
+      const bitrate = quality===2160 ? 32000000 : quality===1080 ? 16000000 : 8000000;
+
+      recorder = new MediaRecorder(
+        stream,
+        mime ? {mimeType:mime,videoBitsPerSecond:bitrate} : {videoBitsPerSecond:bitrate}
+      );
+
+      chunks = [];
+
+      recorder.ondataavailable = e => {
+        if(e.data && e.data.size) chunks.push(e.data);
+      };
+
+      recorder.onstop = () => {
+        clearInterval(timerInt);
+        timerInt = null;
+        $('#recPill').classList.remove('show');
+
+        const blob = new Blob(chunks,{type:recorder.mimeType || 'video/webm'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const stamp = new Date().toISOString().replace(/[:.]/g,'-');
+        a.href = url;
+        a.download = `studio-recording-${stamp}.webm`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url),60000);
+
+        if(micStream){
+          micStream.getTracks().forEach(t => t.stop());
+          micStream = null;
+        }
+
+        syncCaptureButtons(!!displayStream,false);
+        setStatus('تم حفظ التسجيل','ok');
+        toast('تم حفظ الفيديو');
+      };
+
+      recorder.start(1000);
+
+      startedAt = Date.now();
+      $('#timer').textContent = '00:00:00';
+      $('#recPill').classList.add('show');
+
+      timerInt = setInterval(() => {
+        const sec = Math.floor((Date.now()-startedAt)/1000);
+        const h = String(Math.floor(sec/3600)).padStart(2,'0');
+        const m = String(Math.floor((sec%3600)/60)).padStart(2,'0');
+        const s = String(sec%60).padStart(2,'0');
+        $('#timer').textContent = `${h}:${m}:${s}`;
+      },250);
+
+      syncCaptureButtons(true,true);
+      setStatus('جاري التسجيل','rec');
+      toast('بدأ التسجيل');
+    }catch(err){
+      console.error(err);
+      toast('تعذر بدء التسجيل');
+    }
+  }
+
+  function stopRecording(){
+    if(recorder && recorder.state !== 'inactive') recorder.stop();
+  }
+
+  function takeShot(){
+    if(!displayStream || !captureVideo.videoWidth || !captureVideo.videoHeight){
+      toast('المصدر غير جاهز');
+      return;
+    }
+
+    const canvas = $('#shotCanvas');
+    canvas.width = captureVideo.videoWidth;
+    canvas.height = captureVideo.videoHeight;
+
+    const ctx = canvas.getContext('2d',{alpha:false});
+    ctx.drawImage(captureVideo,0,0,canvas.width,canvas.height);
+
+    canvas.toBlob(blob => {
+      if(!blob) return;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const stamp = new Date().toISOString().replace(/[:.]/g,'-');
+      a.href = url;
+      a.download = `screenshot-${canvas.width}x${canvas.height}-${stamp}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url),30000);
+      toast(`تم حفظ PNG بدقة ${canvas.width}×${canvas.height}`);
+    },'image/png',1);
+  }
+
+  // site / preview
+  $('#loadBtn').onclick = renderMain;
+  $('#openSiteBtn').onclick = () => window.open(normalizeUrl($('#siteUrl').value),'_blank','noopener,noreferrer');
+
+  $('#applySizeBtn').onclick = () => {
+    viewportW = Math.max(200,parseInt($('#customW').value||0,10)||1440);
+    viewportH = Math.max(200,parseInt($('#customH').value||0,10)||900);
+    renderMain();
+  };
+
+  $('#swapBtn').onclick = () => {
+    const t = viewportW; viewportW = viewportH; viewportH = t; renderMain();
+  };
+
+  $('#fitBtn').onclick = fitMain;
+
+  $('#deviceCards').addEventListener('click',e => {
+    const btn = e.target.closest('.card');
+    if(!btn) return;
+
+    document.querySelectorAll('#deviceCards .card').forEach(x => x.classList.remove('active'));
+    btn.classList.add('active');
+    device = btn.dataset.device;
+
+    if(device==='mobile' && viewportW>600){viewportW=390;viewportH=844}
+    else if(device==='tablet' && viewportW<700){viewportW=1024;viewportH=1366}
+    else if(['laptop','monitor','browser'].includes(device) && viewportW<900){viewportW=1440;viewportH=900}
+
+    renderMain();
+  });
+
+  $('#presetChips').addEventListener('click',e => {
+    const btn = e.target.closest('.chip');
+    if(!btn) return;
+
+    document.querySelectorAll('#presetChips .chip').forEach(x => x.classList.remove('active'));
+    btn.classList.add('active');
+
+    viewportW = parseInt(btn.dataset.w,10);
+    viewportH = parseInt(btn.dataset.h,10);
+
+    if(viewportW<=500) device='mobile';
+    else if(viewportW<=1100 && viewportH>=1200) device='tablet';
+    else device='laptop';
+
+    const card = document.querySelector(`#deviceCards .card[data-device="${device}"]`);
+    if(card){
+      document.querySelectorAll('#deviceCards .card').forEach(x => x.classList.remove('active'));
+      card.classList.add('active');
+    }
+
+    renderMain();
+  });
+
+  // clean fixed mode
+  $('#cleanModeBtn').onclick = () => {
+    renderClean();
+    cleanOverlay.classList.add('show');
+    document.body.classList.add('locked');
+  };
+
+  $('#closeCleanBtn').onclick = () => {
+    cleanOverlay.classList.remove('show');
+    document.body.classList.remove('locked');
+  };
+
+  $('#cleanFitBtn').onclick = () => fitClean(true);
+  $('#zoomInBtn').onclick = () => {cleanZoom += .08;fitClean(false)};
+  $('#zoomOutBtn').onclick = () => {cleanZoom = Math.max(.3,cleanZoom-.08);fitClean(false)};
+  $('#fullscreenBtn').onclick = () => goFullscreen(document.documentElement);
+  $('#cleanFullscreenBtn').onclick = () => goFullscreen(cleanOverlay);
+
+  // recorder
+  $('#qualityChips').addEventListener('click',e => {
+    const btn = e.target.closest('.chip');
+    if(!btn || !btn.dataset.q) return;
+    document.querySelectorAll('#qualityChips .chip').forEach(x => x.classList.remove('active'));
+    btn.classList.add('active');
+    quality = parseInt(btn.dataset.q,10);
+  });
+
+  $('#pickScreenBtn').onclick = pickScreen;
+  $('#startRecBtn').onclick = startRecording;
+  $('#stopRecBtn').onclick = stopRecording;
+  $('#shotBtn').onclick = takeShot;
+
+  $('#cleanPickBtn').onclick = pickScreen;
+  $('#cleanStartBtn').onclick = startRecording;
+  $('#cleanStopBtn').onclick = stopRecording;
+  $('#cleanShotBtn').onclick = takeShot;
+
+  $('#siteUrl').addEventListener('keydown',e => {if(e.key==='Enter') renderMain()});
+
+  window.addEventListener('resize',() => {
+    fitMain();
+    if(cleanOverlay.classList.contains('show')) fitClean(false);
+  });
+
+  window.addEventListener('beforeunload',() => {
+    try{displayStream?.getTracks().forEach(t => t.stop())}catch(e){}
+    try{micStream?.getTracks().forEach(t => t.stop())}catch(e){}
+  });
+
+  setupCompatibility();
+  renderMain();
+})();
+</script>
+</body>
+</html>
