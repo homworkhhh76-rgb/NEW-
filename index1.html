@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>معاينة، تسجيل شاشة، والتقاط صور</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f9; padding: 20px; color: #333; }
+        .container { max-width: 900px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        h1, h2 { text-align: center; color: #444; }
+        .buttons { display: flex; justify-content: center; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        button { padding: 10px 20px; border: none; border-radius: 5px; background: #007bff; color: white; cursor: pointer; font-size: 16px; transition: 0.3s; }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .preview-section { margin-bottom: 30px; border: 1px solid #ddd; padding: 10px; border-radius: 5px; }
+        iframe { width: 100%; height: 400px; border: 1px solid #ccc; border-radius: 5px; }
+        video { width: 100%; border: 1px solid #333; border-radius: 5px; background: #000; margin-top: 10px; }
+        img { width: 100%; border: 1px solid #ccc; margin-top: 10px; border-radius: 5px; }
+        canvas { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>أداة معاينة وتسجيل الشاشة</h1>
+
+    <div class="preview-section">
+        <h2>1. معاينة الموقع</h2>
+        <iframe src="https://example.com" title="معاينة الموقع"></iframe>
+    </div>
+
+    <div class="preview-section">
+        <h2>2. تسجيل الشاشة والتقاط الصور</h2>
+        
+        <div class="buttons">
+            <button id="startBtn">بدء مشاركة الشاشة</button>
+            <button id="recordBtn" disabled>بدء التسجيل</button>
+            <button id="stopBtn" disabled>إيقاف التسجيل</button>
+            <button id="screenshotBtn" disabled>التقاط صورة</button>
+        </div>
+
+        <video id="videoPreview" autoplay muted></video>
+        
+        <h3>الفيديو المسجل:</h3>
+        <video id="recordedVideo" controls></video>
+        <a id="downloadVideo" style="display: none;">تحميل الفيديو</a>
+
+        <h3>لقطة الشاشة (صورة):</h3>
+        <img id="screenshotImg" alt="لقطة الشاشة ستظهر هنا" />
+        <canvas id="canvas"></canvas>
+    </div>
+</div>
+
+<script>
+    let stream;
+    let mediaRecorder;
+    let recordedChunks = [];
+
+    const startBtn = document.getElementById('startBtn');
+    const recordBtn = document.getElementById('recordBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const screenshotBtn = document.getElementById('screenshotBtn');
+    const videoPreview = document.getElementById('videoPreview');
+    const recordedVideo = document.getElementById('recordedVideo');
+    const screenshotImg = document.getElementById('screenshotImg');
+    const canvas = document.getElementById('canvas');
+    const downloadVideo = document.getElementById('downloadVideo');
+
+    // 1. طلب إذن مشاركة الشاشة
+    startBtn.addEventListener('click', async () => {
+        try {
+            stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+            videoPreview.srcObject = stream;
+            
+            // تفعيل الأزرار بعد بدء البث
+            recordBtn.disabled = false;
+            screenshotBtn.disabled = false;
+            startBtn.disabled = true;
+
+            // إيقاف البث عند إغلاق المستخدم للنافذة من المتصفح
+            stream.getVideoTracks()[0].onended = () => {
+                stopStream();
+            };
+        } catch (err) {
+            console.error("حدث خطأ أثناء الوصول للشاشة: ", err);
+            alert("لم يتم منح إذن مشاركة الشاشة.");
+        }
+    });
+
+    // 2. بدء تسجيل الفيديو
+    recordBtn.addEventListener('click', () => {
+        recordedChunks = [];
+        mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+        
+        mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+                recordedChunks.push(event.data);
+            }
+        };
+
+        mediaRecorder.onstop = () => {
+            const blob = new Blob(recordedChunks, { type: 'video/webm' });
+            const url = URL.createObjectURL(blob);
+            recordedVideo.src = url;
+            
+            // تجهيز رابط التحميل
+            downloadVideo.href = url;
+            downloadVideo.download = 'screen-recording.webm';
+            downloadVideo.style.display = 'block';
+            downloadVideo.innerText = "💾 اضغط هنا لتحميل الفيديو";
+        };
+
+        mediaRecorder.start();
+        recordBtn.disabled = true;
+        stopBtn.disabled = false;
+        recordBtn.innerText = "جاري التسجيل...";
+    });
+
+    // 3. إيقاف التسجيل
+    stopBtn.addEventListener('click', () => {
+        mediaRecorder.stop();
+        recordBtn.disabled = false;
+        stopBtn.disabled = true;
+        recordBtn.innerText = "بدء التسجيل";
+    });
+
+    // 4. التقاط صورة للشاشة (Screenshot)
+    screenshotBtn.addEventListener('click', () => {
+        const context = canvas.getContext('2d');
+        // ضبط أبعاد الـ Canvas لتطابق أبعاد الفيديو الفعلي
+        canvas.width = videoPreview.videoWidth;
+        canvas.height = videoPreview.videoHeight;
+        
+        // رسم الإطار الحالي للفيديو على الـ Canvas
+        context.drawImage(videoPreview, 0, 0, canvas.width, canvas.height);
+        
+        // تحويل الـ Canvas إلى صورة وعرضها
+        const imageUrl = canvas.toDataURL('image/png');
+        screenshotImg.src = imageUrl;
+    });
+
+    // وظيفة لإعادة تعيين الواجهة عند توقف البث
+    function stopStream() {
+        startBtn.disabled = false;
+        recordBtn.disabled = true;
+        stopBtn.disabled = true;
+        screenshotBtn.disabled = true;
+        videoPreview.srcObject = null;
+    }
+</script>
+
+</body>
+</html>
